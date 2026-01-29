@@ -57,7 +57,7 @@
   {
     "kind": 2,
     "language": "lot",
-    "value": "DEFINE MODEL FactorySensorSummary\r\n    ADD \"factory_id\" AS STRING FROM TOPIC \"config/factory_id\"\r\n    ADD \"temperature\" AS DOUBLE FROM TOPIC \"sensors/temperature/value\" AS TRIGGER\r\n    ADD \"pressure\" AS DOUBLE FROM TOPIC \"sensors/pressure/value\"\r\n    ADD \"humidity\" AS DOUBLE FROM TOPIC \"sensors/humidity/value\"\r\n    ADD \"timestamp\" AS STRING FROM TOPIC \"sensors/timestamp\"\r\n    PUBLISH TO \"factory/sensors/summary\""
+    "value": "DEFINE MODEL FactorySensorSummary WITH TOPIC \"factory/sensors/summary\"\r\n    ADD \"factory_id\" AS STRING WITH TOPIC \"config/factory_id\"\r\n    ADD \"temperature\" AS DOUBLE WITH TOPIC \"sensors/temperature/value\" AS TRIGGER\r\n    ADD \"pressure\" AS DOUBLE WITH TOPIC \"sensors/pressure/value\"\r\n    ADD \"humidity\" AS DOUBLE WITH TOPIC \"sensors/humidity/value\"\r\n    ADD \"timestamp\" AS STRING WITH TOPIC \"sensors/timestamp\"\r\n"
   },
   {
     "kind": 1,
