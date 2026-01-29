@@ -167,7 +167,7 @@ When you run a LoT cell:
 - [Coreflux Documentation](https://docs.coreflux.org)
 - [LoT Notebooks Extension](https://marketplace.visualstudio.com/items?itemName=Coreflux.vscode-lot-notebooks)
 - [Community Discord](https://discord.com/invite/A3pPrptNMm)
-- [GitHub Examples](https://github.com/CorefluxCommunity)
+
 
 ## License
 
