@@ -1,0 +1,32 @@
+# LoT Broker Configuration
+# =============================================================================
+# This file configures the MQTT broker connection for LoT notebooks.
+# Copy this file to .broker (without .example) and modify as needed.
+#
+# Format: mqtt://[username:password@]host:port
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Option 1: Local Development (default)
+# -----------------------------------------------------------------------------
+# Connect to local Coreflux broker running in Docker
+mqtt://localhost:1883
+
+# With authentication (recommended for production):
+# mqtt://admin:coreflux@localhost:1883
+
+# -----------------------------------------------------------------------------
+# Option 2: Public Cloud Broker
+# -----------------------------------------------------------------------------
+# Connect to Coreflux public broker for cloud demos
+# WARNING: All messages are visible to everyone on this broker!
+# mqtt://iot.coreflux.cloud:1883
+
+# With TLS encryption (recommended):
+# mqtts://iot.coreflux.cloud:8883
+
+# -----------------------------------------------------------------------------
+# Option 3: Secondary Broker (for bridge testing)
+# -----------------------------------------------------------------------------
+# Connect to local Mosquitto broker
+# mqtt://localhost:1884

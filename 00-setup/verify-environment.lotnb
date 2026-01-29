@@ -12,7 +12,7 @@
   {
     "kind": 1,
     "language": "markdown",
-    "value": "\r\nExpected services:\r\n- `coreflux_broker` - Primary MQTT broker (port 1883)\r\n- `lot_postgres` - PostgreSQL database (port 5432)\r\n- `opcua_factory_simulator` - OPC UA simulator (port 4840)\r\n- `mosquitto_bridge` - Secondary MQTT broker (port 1884)\r\n- `lot_adminer` - Database UI (port 8080)\r\n\r\n---\r\n\r\n## Service Connection Details\r\n\r\n| Service | Host | Port | Credentials |\r\n|---------|------|------|-------------|\r\n| Coreflux MQTT | localhost | 1883 | admin / coreflux |\r\n| PostgreSQL | localhost | 5432 | lot_user / lot_training_pass |\r\n| OPC UA Simulator | localhost | 4840 | (no auth) |\r\n| Mosquitto MQTT | localhost | 1884 | (no auth) |\r\n| Adminer UI | localhost | 8080 | (web interface) |\r\n| Coreflux Public | iot.coreflux.cloud | 1883 | (no auth) |\r\n\r\n---"
+    "value": "\r\nExpected services:\r\n- `coreflux_broker` - Primary MQTT broker (port 1883)\r\n- `lot_postgres` - PostgreSQL database (port 5432)\r\n- `opcua_factory_simulator` - OPC UA simulator (port 4840)\r\n- `mosquitto_bridge` - Secondary MQTT broker (port 1884)\r\n- `lot_adminer` - Database UI (port 8080)\r\n\r\n---\r\n\r\n## Service Connection Details\r\n\r\n| Service | Host | Port | Credentials |\r\n|---------|------|------|-------------|\r\n| Coreflux MQTT | localhost | 1883 | root / coreflux |\r\n| PostgreSQL | localhost | 5432 | lot_user / lot_training_pass |\r\n| OPC UA Simulator | localhost | 4840 | (no auth) |\r\n| Mosquitto MQTT | localhost | 1884 | (no auth) |\r\n| Adminer UI | localhost | 8080 | (web interface) |\r\n| Coreflux Public | iot.coreflux.cloud | 1883 | (no auth) |\r\n\r\n---"
   },
   {
     "kind": 1,
