@@ -1,0 +1,194 @@
+# LoT Training Environment - Docker Compose Configuration
+# 
+# This configuration provides a complete learning environment with:
+#   - Coreflux MQTT Broker (primary)
+#   - PostgreSQL Database (for database route exercises)
+#   - OPC UA Factory Simulator (industrial simulation)
+#   - Mosquitto MQTT Broker (for bridge exercises)
+#   - Adminer (database management UI)
+#
+# Usage:
+#   Start all:     docker-compose up -d
+#   Start core:    docker-compose up -d coreflux postgres
+#   Stop:          docker-compose down
+#   Logs:          docker-compose logs -f
+#   Restart:       docker-compose restart
+#   Status:        docker-compose ps
+#
+# ============================================================================
+# IMPORTANT: Free Tier Resource Limits
+# ============================================================================
+# The free version of Coreflux has the following limits:
+#   - Routes:  2 maximum
+#   - Actions: 12 maximum
+#   - Models:  40 maximum
+# Delete unused resources before creating new ones during exercises.
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # Coreflux MQTT Broker (Primary)
+  # ===========================================================================
+  # Main MQTT broker with LoT runtime for executing actions, models, and routes
+  coreflux:
+    image: coreflux/coreflux-mqtt-broker:latest
+    container_name: coreflux_broker
+    ports:
+      - "1883:1883"     # MQTT Protocol (unencrypted)
+      - "5000:5000"
+      - "8883:8883"
+      - "80:8080"
+      - "8883:8883"     # MQTT over TLS (encrypted)
+      - "443:443"       # HTTPS WebSocket (if using TLS)
+    volumes:
+      - coreflux_data:/app/Coreflux
+    environment:
+      - CONFIG_PATH=/app/Coreflux
+    networks:
+      - lot_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================================================
+  # PostgreSQL Database
+  # ===========================================================================
+  # Database for route exercises - comes pre-configured with training tables
+  postgres:
+    image: postgres:15-alpine
+    container_name: lot_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lot_training}
+      POSTGRES_USER: ${POSTGRES_USER:-lot_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lot_training_pass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - lot_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lot_user} -d ${POSTGRES_DB:-lot_training}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================================================
+  # OPC UA Factory Simulator
+  # ===========================================================================
+  # Microsoft's OPC PLC simulator - provides realistic industrial I/O simulation
+  # 
+  # Simulated Tags (accessible at opc.tcp://localhost:4840):
+  #   - ns=2;s=SlowUInt1        (slow changing counter)
+  #   - ns=2;s=FastUInt1        (fast changing counter)
+  #   - ns=2;s=RandomSignedInt32 (random values)
+  #   - ns=2;s=RandomUnsignedInt32 (random values)
+  #   - ns=2;s=AlternatingBoolean (boolean toggle)
+  #   - ns=2;s=NegativeTrendData (trending down)
+  #   - ns=2;s=PositiveTrendData (trending up)
+  #   - ns=2;s=DipData          (dipping pattern)
+  #   - ns=2;s=SpikeData        (spiking pattern)
+  #
+  # Custom production line simulation via --fn parameter
+  opcua_simulator:
+    image: mcr.microsoft.com/iotedge/opc-plc:latest
+    container_name: opcua_factory_simulator
+    ports:
+      - "4840:50000"    # OPC UA endpoint
+    command: >
+      --pn=50000
+      --autoaccept
+      --nospikes=false
+      --nodips=false
+      --anomalyrate=5
+      --anomalyoffset=20
+      --fn=5
+      --fr=1
+      --ft=uint
+      --veryfastrate=500
+      --fastrate=1000
+      --slowrate=5000
+    networks:
+      - lot_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ===========================================================================
+  # Mosquitto MQTT Broker (Secondary)
+  # ===========================================================================
+  # Secondary broker for MQTT bridge exercises
+  # Allows testing broker-to-broker communication without external dependencies
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto_bridge
+    ports:
+      - "1884:1883"     # MQTT on alternate port
+      - "9001:9001"     # WebSocket
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    networks:
+      - lot_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/#' -C 1 -W 3 || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================================================
+  # Adminer - Database Management UI
+  # ===========================================================================
+  # Web-based database management tool for PostgreSQL
+  # Access at http://localhost:8080
+  adminer:
+    image: adminer:latest
+    container_name: lot_adminer
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    networks:
+      - lot_network
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  coreflux_data:
+    driver: local
+  postgres_data:
+    driver: local
+  mosquitto_data:
+    driver: local
+  mosquitto_log:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  lot_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

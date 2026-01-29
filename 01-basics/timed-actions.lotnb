@@ -1,0 +1,57 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# Timed Actions - Your First LoT Tutorial\n\n[⬅️ Previous: Environment Setup](../00-setup/verify-environment.lotnb) | [🏠 Back to Index](../index.lotnb) | [➡️ Next: Topic Actions](./topic-actions.lotnb)\n\n---\n\n<details>\n<summary><strong>Navigation Menu</strong></summary>\n\n| Section | Tutorials |\n|---------|----------|\n| **Setup** | [Environment Setup](../00-setup/verify-environment.lotnb) |\n| **Basics** | [Timed Actions](./timed-actions.lotnb) \\| [Topic Actions](./topic-actions.lotnb) |\n| **Logic** | [Conditional Logic](../02-logic/conditional-logic.lotnb) |\n| **Models** | [Basic Models](../03-models/basic-models.lotnb) \\| [Action Models](../03-models/action-models.lotnb) \\| [Inheritance](../03-models/model-inheritance.lotnb) |\n| **Routes** | [MQTT Bridge](../04-routes/mqtt-bridge.lotnb) \\| [Database](../04-routes/database-routes.lotnb) |\n| **Python** | [Simple](../05-python/simple-python.lotnb) \\| [Advanced](../05-python/advanced-python.lotnb) |\n\n</details>\n\n---\n\n> **CAUTION - Free Tier Resource Limits**\n>\n> The free version of Coreflux has resource limits:\n> - **Routes**: 2 maximum\n> - **Actions**: 12 maximum\n> - **Models**: 40 maximum\n>\n> Delete unused resources before creating new ones during exercises.\n\n---\n\n## Learning Objectives\n\nIn this tutorial, you will learn:\n- How to create actions that run on time intervals\n- The `ON EVERY` syntax and time units\n- Basic data publishing with `PUBLISH TOPIC`\n- Working with timestamps and counters\n- State persistence between action executions\n\n---\n\n## 📖 Introduction\n\n**Timed Actions** are the heartbeat of LoT applications. They allow you to:\n- Monitor systems at regular intervals\n- Generate heartbeat signals\n- Perform periodic maintenance tasks\n- Create time-based alerts and notifications\n\n### Real-World Applications\n- **Machine Health Monitoring**: Check equipment status every 30 seconds\n- **Production Reporting**: Send hourly production summaries\n- **Heartbeat Signals**: Confirm system is alive every 5 seconds\n- **Scheduled Maintenance**: Trigger maintenance reminders weekly\n\n---\n\n## 🧠 Core Concepts\n\n### The `ON EVERY` Syntax\n\nLoT supports various time units:\n- `ON EVERY 1 SECOND`\n- `ON EVERY 30 SECONDS` \n- `ON EVERY 5 MINUTES`\n- `ON EVERY 2 HOURS`\n- `ON EVERY 1 DAY`\n- `ON EVERY 1 WEEK`\n\n### Publishing Data\n\nThe `PUBLISH TOPIC` command sends data to MQTT topics:\n```lot\nPUBLISH TOPIC \"topic/name\" WITH \"data\"\n```\n\n### Timestamps\n\nLoT provides built-in timestamp functions:\n- `TIMESTAMP \"UTC\"` - UTC timestamp string\n- `TIMESTAMP \"UNIX\"` - Unix timestamp number\n\n---\n\n## 🛠️ Hands-On Examples\n\n### Example 1: Simple Heartbeat\n\nLet's start with the most basic timed action - a heartbeat signal:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION SimpleHeartbeat\r\nON EVERY 5 SECONDS DO\r\n    PUBLISH TOPIC \"system/heartbeat\" WITH \"alive\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\r\n- Runs every 5 seconds automatically\r\n- Publishes \"alive\" to the `system/heartbeat` topic\r\n- Provides a simple way to monitor if the system is running\r\n\r\n**Expected Output:**\r\n```\r\nsystem/heartbeat: \"alive\" (every 5 seconds)\r\n```\r\n\r\n---\r\n\r\n### Example 2: Timestamp Publisher\r\n\r\nNow let's add timestamps to track when events occur:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION TimestampPublisher\r\nON EVERY 10 SECONDS DO\r\n    PUBLISH TOPIC \"system/time/utc\" WITH TIMESTAMP \"UTC\"\r\n    PUBLISH TOPIC \"system/time/unix\" WITH TIMESTAMP \"UNIX\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Runs every 10 seconds\n- Publishes current UTC timestamp (human-readable)\n- Publishes current Unix timestamp (numeric)\n- Useful for time synchronization and logging\n\n**Expected Output:**\n```\nsystem/time/utc: \"2025-10-25T14:30:15Z\"\nsystem/time/unix: 1729864215\n```\n\n---\n\n### Example 3: Simple Counter\n\nLet's create a counter that increments every second:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION SimpleCounter\r\nON EVERY 1 SECOND DO\r\n    PUBLISH TOPIC \"counter/value\" WITH ((GET TOPIC \"counter/value\") + 1)"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\r\n- Runs every second\r\n- Gets the current value from `counter/value` topic\r\n- Adds 1 to it and publishes the result back\r\n- Creates a persistent counter that survives between executions\r\n\r\n**Key Concept - State Persistence:**\r\n- `GET TOPIC` retrieves the last published value\r\n- If the topic doesn't exist, it returns 0 (for numeric operations)\r\n- This creates persistent state without external storage\r\n\r\n**Expected Output:**\r\n```\r\ncounter/value: 1 (after 1 second)\r\ncounter/value: 2 (after 2 seconds)\r\ncounter/value: 3 (after 3 seconds)\r\n...\r\n```\r\n\r\n---\r\n\r\n### Example 4: Counter with Reset\r\n\r\nLet's make the counter reset when it reaches 100:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION CounterWithReset\r\nON EVERY 1 SECOND DO\r\n    // Increment the counter\r\n    SET \"new_count\" WITH (GET TOPIC \"counter/value\")\r\n    \r\n    // Check if we need to reset\r\n    IF {new_count} >= 25 THEN\r\n        PUBLISH TOPIC \"counter/value\" WITH 0\r\n        PUBLISH TOPIC \"counter/value/status\" WITH \"Counter reset at 25!\"\r\n    ELSE\r\n        PUBLISH TOPIC \"counter/value\" WITH {new_count}+1"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Uses `SET` to create variables for calculations\n- Implements conditional logic with `IF...ELSE`\n- Resets counter when it reaches 100\n- Publishes status messages for important events\n\n**Key Concepts:**\n- `SET \"variable_name\" WITH value` - Creates variables\n- `{variable_name}` - References variables\n- `IF...ELSE` - Conditional execution\n- Variables exist only within the action execution\n\n---\n\n### Example 5: Production Line Simulator\n\nLet's create a more realistic example - a production line simulator:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION ProductionLineSimulator\r\nON EVERY 30 SECONDS DO\r\n    // Simulate production of parts\r\n    SET \"parts_produced\" WITH ((GET TOPIC \"factory/line1/parts_produced\") + 5)\r\n    SET \"total_runtime\" WITH ((GET TOPIC \"factory/line1/runtime_minutes\") + 0.5)\r\n    \r\n    // Update production metrics\r\n    PUBLISH TOPIC \"factory/line1/parts_produced\" WITH {parts_produced}\r\n    PUBLISH TOPIC \"factory/line1/runtime_minutes\" WITH {total_runtime}\r\n    PUBLISH TOPIC \"factory/line1/last_update\" WITH TIMESTAMP \"UTC\"\r\n    \r\n    // Calculate and publish production rate (parts per minute)\r\n    SET \"production_rate\" WITH (GET TOPIC \"factory/line1/parts_produced\" AS DOUBLE / GET TOPIC \"factory/line1/runtime_minutes\" AS DOUBLE)\r\n    PUBLISH TOPIC \"factory/line1/production_rate\" WITH {production_rate}\r\n    \r\n    // Status message\r\n    PUBLISH TOPIC \"factory/line1/status\" WITH \"Running - Produced \" + {parts_produced} + \" parts\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Simulates a production line producing 5 parts every 30 seconds\n- Tracks total runtime in minutes\n- Calculates production rate (parts per minute)\n- Provides status updates with current production count\n- Demonstrates realistic industrial IoT data patterns\n\n**Expected Output:**\n```\nfactory/line1/parts_produced: 5, 10, 15, 20...\nfactory/line1/runtime_minutes: 0.5, 1.0, 1.5, 2.0...\nfactory/line1/production_rate: 10.0, 10.0, 10.0...\nfactory/line1/status: \"Running - Produced 15 parts\"\n```\n\n---\n\n## 🏋️ Exercises\n\n### Exercise 1: Basic Timer\n**Task**: Create an action that publishes \"Hello World!\" every 3 seconds to topic `training/hello`.\n\n**Hint**: Use the `SimpleHeartbeat` example as a template.\n\n### Exercise 2: Minute Counter\n**Task**: Create a counter that increments every minute and publishes to `training/minutes`.\n\n**Hint**: Change the time unit and topic name from the `SimpleCounter` example.\n\n### Exercise 3: Daily Report\n**Task**: Create an action that runs once per day and publishes a daily report message with timestamp.\n\n**Hint**: Use `ON EVERY 1 DAY` and include `TIMESTAMP \"UTC\"`.\n\n### Exercise 4: Temperature Simulator\n**Task**: Create a temperature simulator that:\n- Runs every 15 seconds\n- Generates temperatures between 20-30°C (use random logic or simple oscillation)\n- Publishes to `sensors/temperature/value`\n- Includes timestamp\n\n**Challenge**: Make the temperature oscillate between 20-30°C using a counter-based approach.\n\n---\n\n## 🎯 Checkpoint Questions\n\n1. **What time units does LoT support for `ON EVERY`?**\n   - Answer: SECOND, MINUTE, HOUR, DAY, WEEK\n\n2. **How do you create persistent state in LoT?**\n   - Answer: Use `GET TOPIC` to retrieve previous values and `PUBLISH TOPIC` to store new ones\n\n3. **What's the difference between `TIMESTAMP \"UTC\"` and `TIMESTAMP \"UNIX\"`?**\n   - Answer: UTC returns human-readable string, UNIX returns numeric timestamp\n\n4. **How do you create variables within an action?**\n   - Answer: Use `SET \"variable_name\" WITH value` and reference with `{variable_name}`\n\n---\n\n## 📝 Summary\n\n### Key Concepts Learned\n✅ **Timed Actions** - `ON EVERY` syntax for periodic execution  \n✅ **Data Publishing** - `PUBLISH TOPIC` to send data  \n✅ **State Persistence** - Using `GET TOPIC` for stateful operations  \n✅ **Variables** - `SET` and `{}` for calculations  \n✅ **Timestamps** - Built-in time functions  \n✅ **Conditional Logic** - `IF...ELSE` statements  \n\n### Next Steps\n- Practice the exercises above\n- Experiment with different time intervals\n- Try combining multiple timed actions\n- Move on to [Topic Actions](./topic-actions.lotnb) to learn event-driven programming\n\n---\n\n## 🚀 Further Exploration\n\n### Advanced Time Patterns\n- Combine multiple time intervals in one action\n- Create time-based state machines\n- Implement scheduling logic with day/hour conditions\n\n### Real-World Projects\n- Build a complete machine monitoring system\n- Create production dashboards with live updates\n- Implement predictive maintenance schedules\n\n---\n\n**Ready for the next level? Continue with [📡 Topic Actions](./topic-actions.lotnb)!**\n\n[🏠 Back to Index](../index.lotnb) | [➡️ Next: Topic Actions](./topic-actions.lotnb)"
+  }
+]

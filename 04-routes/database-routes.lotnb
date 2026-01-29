@@ -1,0 +1,197 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# Database Routes - Persisting Your Data\n\n[⬅️ Previous: MQTT Bridge](./mqtt-bridge.lotnb) | [🏠 Back to Index](../index.lotnb) | [➡️ Next: Simple Python](../05-python/simple-python.lotnb)\n\n---\n\n<details>\n<summary><strong>Navigation Menu</strong></summary>\n\n| Section | Tutorials |\n|---------|----------|\n| **Setup** | [Environment Setup](../00-setup/verify-environment.lotnb) |\n| **Basics** | [Timed Actions](../01-basics/timed-actions.lotnb) \\| [Topic Actions](../01-basics/topic-actions.lotnb) |\n| **Logic** | [Conditional Logic](../02-logic/conditional-logic.lotnb) |\n| **Models** | [Basic Models](../03-models/basic-models.lotnb) \\| [Action Models](../03-models/action-models.lotnb) \\| [Inheritance](../03-models/model-inheritance.lotnb) |\n| **Routes** | [MQTT Bridge](./mqtt-bridge.lotnb) \\| [Database](./database-routes.lotnb) |\n| **Python** | [Simple](../05-python/simple-python.lotnb) \\| [Advanced](../05-python/advanced-python.lotnb) |\n\n</details>\n\n---\n\n> **CAUTION - Free Tier Resource Limits**\n>\n> The free version of Coreflux has resource limits:\n> - **Routes**: 2 maximum\n> - **Actions**: 12 maximum\n> - **Models**: 40 maximum\n>\n> Delete unused resources before creating new ones during exercises.\n> **This tutorial uses database routes - remember you only have 2 route slots!**\n\n---\n\n## Learning Objectives\n\nIn this tutorial, you will learn:\n- How to create database routes in LoT\n- Connecting to PostgreSQL (included in Docker setup)\n- Creating database events with SQL queries\n- Using `{payload.json.field}` syntax for data extraction\n- Building complete CRUD operations\n- Best practices for data persistence\n\n---\n\n## Prerequisites\n\nEnsure the PostgreSQL database is running:\n\n```bash\ncd setup\ndocker-compose up -d postgres\ndocker-compose ps\n```\n\n**Connection Details:**\n| Setting | Value |\n|---------|-------|\n| Host | `lot_postgres` (from Docker) or `localhost` |\n| Port | 5432 |\n| Database | `lot_training` |\n| Username | `lot_user` |\n| Password | `lot_training_pass` |\n\n**Database Management UI:** http://localhost:8080 (Adminer)\n\n---\n\n## Training Database Tables\n\nThe Docker setup includes pre-created tables:\n\n| Table | Purpose |\n|-------|--------|\n| `production_records` | Production batch tracking |\n| `sensor_readings` | Time-series sensor data |\n| `quality_results` | Quality control results |\n| `traceability` | Part/component tracking |\n| `equipment_status` | Equipment state tracking |\n| `alarms` | Alarm history |\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Example 1: Production Database (Working Example)\n\nThis route connects to the training PostgreSQL database:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE ProductionDB WITH TYPE POSTGRESQL\r\n    ADD SQL_CONFIG\r\n        WITH SERVER \"lot_postgres\"\r\n        WITH PORT 5432\r\n        WITH DATABASE \"lot_training\"\r\n        WITH USERNAME \"lot_user\"\r\n        WITH PASSWORD \"lot_training_pass\"\r\n        WITH USE_SSL FALSE\r\n    ADD EVENT CreateProductionRecord\r\n        WITH QUERY \"INSERT INTO production_records (batch_id, product_code, quantity_produced, quantity_target, operator, shift, line_id, efficiency) VALUES ('{payload.json.batch_id}', '{payload.json.product_code}', {payload.json.quantity_produced}, {payload.json.quantity_target}, '{payload.json.operator}', '{payload.json.shift}', '{payload.json.line_id}', {payload.json.efficiency}) RETURNING *\"\r\n        WITH SOURCE_TOPIC \"db/production/create\"\r\n        WITH DESTINATION_TOPIC \"db/production/created\"\r\n    ADD EVENT GetProductionRecords\r\n        WITH QUERY \"SELECT * FROM production_records ORDER BY created_at DESC LIMIT 10\"\r\n        WITH SOURCE_TOPIC \"db/production/list\"\r\n        WITH DESTINATION_TOPIC \"db/production/list/result\"\r\n    ADD EVENT GetProductionByBatch\r\n        WITH QUERY \"SELECT * FROM production_records WHERE batch_id = '{payload.json.batch_id}'\"\r\n        WITH SOURCE_TOPIC \"db/production/get\"\r\n        WITH DESTINATION_TOPIC \"db/production/get/result\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test this example:**\n\n1. Create a new production record:\n```\nPublish to: db/production/create\nPayload: {\n  \"batch_id\": \"BATCH-TEST-001\",\n  \"product_code\": \"WIDGET-X100\",\n  \"quantity_produced\": 250,\n  \"quantity_target\": 300,\n  \"operator\": \"Training User\",\n  \"shift\": \"Day\",\n  \"line_id\": \"LINE-01\",\n  \"efficiency\": 83.33\n}\n```\n\n2. List all production records:\n```\nPublish to: db/production/list\nPayload: {}\n```\n\n3. Get specific batch:\n```\nPublish to: db/production/get\nPayload: {\"batch_id\": \"BATCH-TEST-001\"}\n```\n\n**View results:** Subscribe to `db/production/#`\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Example 2: Sensor Data Storage\n\nStore and query time-series sensor readings:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE SensorDB WITH TYPE POSTGRESQL\r\n    ADD SQL_CONFIG\r\n        WITH SERVER \"lot_postgres\"\r\n        WITH PORT 5432\r\n        WITH DATABASE \"lot_training\"\r\n        WITH USERNAME \"lot_user\"\r\n        WITH PASSWORD \"lot_training_pass\"\r\n        WITH USE_SSL FALSE\r\n    ADD EVENT RecordSensorReading\r\n        WITH QUERY \"INSERT INTO sensor_readings (sensor_id, sensor_type, value, unit, location, quality) VALUES ('{payload.json.sensor_id}', '{payload.json.sensor_type}', {payload.json.value}, '{payload.json.unit}', '{payload.json.location}', '{payload.json.quality}') RETURNING *\"\r\n        WITH SOURCE_TOPIC \"db/sensors/record\"\r\n        WITH DESTINATION_TOPIC \"db/sensors/recorded\"\r\n    ADD EVENT GetSensorHistory\r\n        WITH QUERY \"SELECT * FROM sensor_readings WHERE sensor_id = '{payload.json.sensor_id}' ORDER BY timestamp DESC LIMIT 20\"\r\n        WITH SOURCE_TOPIC \"db/sensors/history\"\r\n        WITH DESTINATION_TOPIC \"db/sensors/history/result\"\r\n    ADD EVENT GetSensorStats\r\n        WITH QUERY \"SELECT sensor_id, sensor_type, COUNT(*) as reading_count, AVG(value) as avg_value, MIN(value) as min_value, MAX(value) as max_value FROM sensor_readings GROUP BY sensor_id, sensor_type\"\r\n        WITH SOURCE_TOPIC \"db/sensors/stats\"\r\n        WITH DESTINATION_TOPIC \"db/sensors/stats/result\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test this example:**\n\n1. Record a sensor reading:\n```\nPublish to: db/sensors/record\nPayload: {\n  \"sensor_id\": \"TEMP-TRAINING-01\",\n  \"sensor_type\": \"temperature\",\n  \"value\": 72.5,\n  \"unit\": \"C\",\n  \"location\": \"Training Room\",\n  \"quality\": \"GOOD\"\n}\n```\n\n2. Get sensor history:\n```\nPublish to: db/sensors/history\nPayload: {\"sensor_id\": \"TEMP-TRAINING-01\"}\n```\n\n3. Get statistics:\n```\nPublish to: db/sensors/stats\nPayload: {}\n```\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Example 3: Quality Results Tracking\n\nTrack quality control inspection results:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE QualityDB WITH TYPE POSTGRESQL\r\n    ADD SQL_CONFIG\r\n        WITH SERVER \"lot_postgres\"\r\n        WITH PORT 5432\r\n        WITH DATABASE \"lot_training\"\r\n        WITH USERNAME \"lot_user\"\r\n        WITH PASSWORD \"lot_training_pass\"\r\n        WITH USE_SSL FALSE\r\n    ADD EVENT RecordQualityResult\r\n        WITH QUERY \"INSERT INTO quality_results (inspection_id, batch_id, part_id, inspection_type, result, measured_value, target_value, tolerance, inspector) VALUES ('{payload.json.inspection_id}', '{payload.json.batch_id}', '{payload.json.part_id}', '{payload.json.inspection_type}', '{payload.json.result}', {payload.json.measured_value}, {payload.json.target_value}, {payload.json.tolerance}, '{payload.json.inspector}') RETURNING *\"\r\n        WITH SOURCE_TOPIC \"db/quality/record\"\r\n        WITH DESTINATION_TOPIC \"db/quality/recorded\"\r\n    ADD EVENT GetQualitySummary\r\n        WITH QUERY \"SELECT result, COUNT(*) as count FROM quality_results GROUP BY result\"\r\n        WITH SOURCE_TOPIC \"db/quality/summary\"\r\n        WITH DESTINATION_TOPIC \"db/quality/summary/result\"\r\n    ADD EVENT GetFailedInspections\r\n        WITH QUERY \"SELECT * FROM quality_results WHERE result = 'FAIL' ORDER BY inspection_time DESC LIMIT 10\"\r\n        WITH SOURCE_TOPIC \"db/quality/failures\"\r\n        WITH DESTINATION_TOPIC \"db/quality/failures/result\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test this example:**\n\n1. Record a quality inspection:\n```\nPublish to: db/quality/record\nPayload: {\n  \"inspection_id\": \"QC-TRAIN-001\",\n  \"batch_id\": \"BATCH-TEST-001\",\n  \"part_id\": \"PART-TRAIN-001\",\n  \"inspection_type\": \"dimensional\",\n  \"result\": \"PASS\",\n  \"measured_value\": 25.02,\n  \"target_value\": 25.00,\n  \"tolerance\": 0.05,\n  \"inspector\": \"Training Inspector\"\n}\n```\n\n2. Get quality summary:\n```\nPublish to: db/quality/summary\nPayload: {}\n```\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Example 4: Equipment Status Tracking\n\nTrack equipment state and health:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE EquipmentDB WITH TYPE POSTGRESQL\r\n    ADD SQL_CONFIG\r\n        WITH SERVER \"lot_postgres\"\r\n        WITH PORT 5432\r\n        WITH DATABASE \"lot_training\"\r\n        WITH USERNAME \"lot_user\"\r\n        WITH PASSWORD \"lot_training_pass\"\r\n        WITH USE_SSL FALSE\r\n    ADD EVENT UpdateEquipmentStatus\r\n        WITH QUERY \"UPDATE equipment_status SET status = '{payload.json.status}', runtime_hours = {payload.json.runtime_hours}, health_score = {payload.json.health_score}, updated_at = NOW() WHERE equipment_id = '{payload.json.equipment_id}' RETURNING *\"\r\n        WITH SOURCE_TOPIC \"db/equipment/update\"\r\n        WITH DESTINATION_TOPIC \"db/equipment/updated\"\r\n    ADD EVENT GetEquipmentList\r\n        WITH QUERY \"SELECT * FROM equipment_status ORDER BY equipment_id\"\r\n        WITH SOURCE_TOPIC \"db/equipment/list\"\r\n        WITH DESTINATION_TOPIC \"db/equipment/list/result\"\r\n    ADD EVENT GetEquipmentByStatus\r\n        WITH QUERY \"SELECT * FROM equipment_status WHERE status = '{payload.json.status}'\"\r\n        WITH SOURCE_TOPIC \"db/equipment/by-status\"\r\n        WITH DESTINATION_TOPIC \"db/equipment/by-status/result\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test this example:**\n\n1. Update equipment status:\n```\nPublish to: db/equipment/update\nPayload: {\n  \"equipment_id\": \"EQ-001\",\n  \"status\": \"RUNNING\",\n  \"runtime_hours\": 1255.5,\n  \"health_score\": 91.0\n}\n```\n\n2. List all equipment:\n```\nPublish to: db/equipment/list\nPayload: {}\n```\n\n3. Get equipment by status:\n```\nPublish to: db/equipment/by-status\nPayload: {\"status\": \"RUNNING\"}\n```\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Example 5: Alarm History\r\n\r\nStore and query alarm events:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE AlarmDB WITH TYPE POSTGRESQL\r\n    ADD SQL_CONFIG\r\n        WITH SERVER \"lot_postgres\"\r\n        WITH PORT 5432\r\n        WITH DATABASE \"lot_training\"\r\n        WITH USERNAME \"lot_user\"\r\n        WITH PASSWORD \"lot_training_pass\"\r\n        WITH USE_SSL FALSE\r\n    ADD EVENT CreateAlarm\r\n        WITH QUERY \"INSERT INTO alarms (alarm_id, equipment_id, alarm_type, severity, message, value, threshold) VALUES ('{payload.json.alarm_id}', '{payload.json.equipment_id}', '{payload.json.alarm_type}', '{payload.json.severity}', '{payload.json.message}', {payload.json.value}, {payload.json.threshold}) RETURNING *\"\r\n        WITH SOURCE_TOPIC \"db/alarms/create\"\r\n        WITH DESTINATION_TOPIC \"db/alarms/created\"\r\n    ADD EVENT AcknowledgeAlarm\r\n        WITH QUERY \"UPDATE alarms SET acknowledged = TRUE, acknowledged_by = '{payload.json.acknowledged_by}', acknowledged_at = NOW() WHERE alarm_id = '{payload.json.alarm_id}' RETURNING *\"\r\n        WITH SOURCE_TOPIC \"db/alarms/acknowledge\"\r\n        WITH DESTINATION_TOPIC \"db/alarms/acknowledged\"\r\n    ADD EVENT GetActiveAlarms\r\n        WITH QUERY \"SELECT * FROM alarms WHERE acknowledged = FALSE ORDER BY triggered_at DESC\"\r\n        WITH SOURCE_TOPIC \"db/alarms/active\"\r\n        WITH DESTINATION_TOPIC \"db/alarms/active/result\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test this example:**\n\n1. Create an alarm:\n```\nPublish to: db/alarms/create\nPayload: {\n  \"alarm_id\": \"ALM-TRAIN-001\",\n  \"equipment_id\": \"EQ-001\",\n  \"alarm_type\": \"TEMPERATURE_HIGH\",\n  \"severity\": \"WARNING\",\n  \"message\": \"Temperature above normal operating range\",\n  \"value\": 85.5,\n  \"threshold\": 80.0\n}\n```\n\n2. Get active alarms:\n```\nPublish to: db/alarms/active\nPayload: {}\n```\n\n3. Acknowledge an alarm:\n```\nPublish to: db/alarms/acknowledge\nPayload: {\"alarm_id\": \"ALM-TRAIN-001\", \"acknowledged_by\": \"Training User\"}\n```\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Example 6: OPC UA + Database Manufacturing Integration\n\nThis is a complete manufacturing example that reads data from the OPC UA factory simulator and stores it in the PostgreSQL database. This demonstrates a real-world industrial data historian pattern.\n\n### Architecture Overview\n\n```\n┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐\n│  OPC UA Server  │────►│    Coreflux     │────►│   PostgreSQL    │\n│  (Simulator)    │     │   LoT Actions   │     │   (Database)    │\n│                 │     │                 │     │                 │\n│ - Temperature   │     │ - Process Data  │     │ - sensor_readings│\n│ - Counters      │────►│ - Check Limits  │────►│ - alarms         │\n│ - Status        │     │ - Create Alarms │     │ - equipment_status│\n└─────────────────┘     └─────────────────┘     └─────────────────┘\n```\n\n### Step 1: Database Route for OPC UA Data\n\nFirst, define the database route that will store OPC UA sensor readings:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE ManufacturingDB WITH TYPE POSTGRESQL\n    ADD SQL_CONFIG\n        WITH SERVER \"lot_postgres\"\n        WITH PORT 5432\n        WITH DATABASE \"lot_training\"\n        WITH USERNAME \"lot_user\"\n        WITH PASSWORD \"lot_training_pass\"\n        WITH USE_SSL FALSE\n    // Store OPC UA sensor readings\n    ADD EVENT RecordOPCUASensor\n        WITH QUERY \"INSERT INTO sensor_readings (sensor_id, sensor_type, value, unit, location, quality) VALUES ('{payload.json.sensor_id}', '{payload.json.sensor_type}', {payload.json.value}, '{payload.json.unit}', '{payload.json.location}', '{payload.json.quality}') RETURNING *\"\n        WITH SOURCE_TOPIC \"manufacturing/db/sensor/record\"\n        WITH DESTINATION_TOPIC \"manufacturing/db/sensor/recorded\"\n    // Store production cycle records\n    ADD EVENT RecordProductionCycle\n        WITH QUERY \"INSERT INTO production_records (batch_id, product_code, quantity_produced, quantity_target, operator, shift, line_id, efficiency) VALUES ('{payload.json.batch_id}', '{payload.json.product_code}', {payload.json.quantity_produced}, {payload.json.quantity_target}, '{payload.json.operator}', '{payload.json.shift}', '{payload.json.line_id}', {payload.json.efficiency}) RETURNING *\"\n        WITH SOURCE_TOPIC \"manufacturing/db/production/record\"\n        WITH DESTINATION_TOPIC \"manufacturing/db/production/recorded\"\n    // Store OPC UA alarms\n    ADD EVENT RecordOPCUAAlarm\n        WITH QUERY \"INSERT INTO alarms (alarm_id, equipment_id, alarm_type, severity, message, value, threshold) VALUES ('{payload.json.alarm_id}', '{payload.json.equipment_id}', '{payload.json.alarm_type}', '{payload.json.severity}', '{payload.json.message}', {payload.json.value}, {payload.json.threshold}) RETURNING *\"\n        WITH SOURCE_TOPIC \"manufacturing/db/alarm/record\"\n        WITH DESTINATION_TOPIC \"manufacturing/db/alarm/recorded\"\n    // Query sensor history for analysis\n    ADD EVENT GetSensorTrend\n        WITH QUERY \"SELECT sensor_id, AVG(value) as avg_value, MIN(value) as min_value, MAX(value) as max_value, COUNT(*) as reading_count FROM sensor_readings WHERE sensor_id = '{payload.json.sensor_id}' AND timestamp > NOW() - INTERVAL '1 hour' GROUP BY sensor_id\"\n        WITH SOURCE_TOPIC \"manufacturing/db/sensor/trend\"\n        WITH DESTINATION_TOPIC \"manufacturing/db/sensor/trend/result\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Step 2: OPC UA Temperature Monitor with Database Storage\n\nThis action reads temperature data from OPC UA, checks thresholds, stores readings in the database, and creates alarms when needed:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION OPCUATemperatureToDatabase\r\nON TOPIC \"opcua/simulator/PositiveTrendData\" DO\r\n    SET \"temperature\" WITH (PAYLOAD AS DOUBLE)\r\n    SET \"timestamp\" WITH TIMESTAMP \"UTC\"\r\n    SET \"sensor_id\" WITH \"OPCUA-TEMP-001\"\r\n    \r\n    // Determine quality based on value range\r\n    IF {temperature} >= 0 AND {temperature} <= 150 THEN\r\n        SET \"quality\" WITH \"GOOD\"\r\n    ELSE\r\n        SET \"quality\" WITH \"BAD\"\r\n    \r\n    // Store reading in database via route\r\n    PUBLISH TOPIC \"manufacturing/db/sensor/record\" WITH {\r\n        \"sensor_id\": {sensor_id},\r\n        \"sensor_type\": \"temperature\",\r\n        \"value\": {temperature},\r\n        \"unit\": \"C\",\r\n        \"location\": \"Production Line 1\",\r\n        \"quality\": {quality}\r\n    }\r\n    \r\n    // Check temperature thresholds and create alarm if needed\r\n    IF {temperature} > 80 THEN\r\n        SET \"alarm_id\" WITH \"ALM-TEMP-\" + TIMESTAMP \"UNIX\"\r\n        PUBLISH TOPIC \"manufacturing/db/alarm/record\" WITH {\r\n            \"alarm_id\": {alarm_id},\r\n            \"equipment_id\": \"LINE-001\",\r\n            \"alarm_type\": \"TEMPERATURE_HIGH\",\r\n            \"severity\": \"WARNING\",\r\n            \"message\": \"Temperature exceeded 80°C limit\",\r\n            \"value\": {temperature},\r\n            \"threshold\": 80.0\r\n        }\r\n        PUBLISH TOPIC \"manufacturing/alarms/active\" WITH \"HIGH TEMPERATURE: \" + {temperature} + \"°C\"\r\n    \r\n    // Publish current status for dashboards\r\n    PUBLISH TOPIC \"manufacturing/temperature/current\" WITH {temperature}\r\n    PUBLISH TOPIC \"manufacturing/temperature/last_update\" WITH {timestamp}"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Step 3: Production Counter with Cycle Tracking\n\nThis action monitors the OPC UA counter (simulating parts produced) and records production cycles:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION OPCUAProductionCounter\r\nON TOPIC \"opcua/simulator/SlowUInt1\" DO\r\n    SET \"current_count\" WITH (PAYLOAD AS INT)\r\n    SET \"previous_count\" WITH (GET TOPIC \"manufacturing/counter/previous\" AS INT)\r\n    SET \"cycle_target\" WITH 100\r\n    \r\n    // Calculate parts produced since last reading\r\n    SET \"parts_delta\" WITH ({current_count} - {previous_count})\r\n    \r\n    // Update running totals\r\n    SET \"total_produced\" WITH (GET TOPIC \"manufacturing/production/total\" AS INT)\r\n    SET \"new_total\" WITH ({total_produced} + {parts_delta})\r\n    PUBLISH TOPIC \"manufacturing/production/total\" WITH {new_total}\r\n    PUBLISH TOPIC \"manufacturing/counter/previous\" WITH {current_count}\r\n    \r\n    // Check if we completed a production cycle (every 100 parts)\r\n    IF {new_total} >= {cycle_target} THEN\r\n        // Get current shift info\r\n        SET \"current_hour\" WITH (TIMESTAMP \"UNIX\" / 3600) % 24\r\n        IF {current_hour} >= 6 AND {current_hour} < 14 THEN\r\n            SET \"shift\" WITH \"Day\"\r\n        ELSE IF {current_hour} >= 14 AND {current_hour} < 22 THEN\r\n            SET \"shift\" WITH \"Evening\"\r\n        ELSE\r\n            SET \"shift\" WITH \"Night\"\r\n        \r\n        // Calculate efficiency\r\n        SET \"efficiency\" WITH ({new_total} / {cycle_target} * 100)\r\n        \r\n        // Generate batch ID\r\n        SET \"batch_id\" WITH \"BATCH-\" + TIMESTAMP \"UNIX\"\r\n        \r\n        // Record production cycle to database\r\n        PUBLISH TOPIC \"manufacturing/db/production/record\" WITH {\r\n            \"batch_id\": {batch_id},\r\n            \"product_code\": \"WIDGET-OPCUA\",\r\n            \"quantity_produced\": {new_total},\r\n            \"quantity_target\": {cycle_target},\r\n            \"operator\": \"OPC UA Simulator\",\r\n            \"shift\": {shift},\r\n            \"line_id\": \"LINE-OPCUA-001\",\r\n            \"efficiency\": {efficiency}\r\n        }\r\n        \r\n        // Reset counter for next cycle\r\n        PUBLISH TOPIC \"manufacturing/production/total\" WITH 0\r\n        PUBLISH TOPIC \"manufacturing/production/cycles_completed\" WITH (GET TOPIC \"manufacturing/production/cycles_completed\" AS INT + 1)\r\n        PUBLISH TOPIC \"manufacturing/production/last_cycle\" WITH TIMESTAMP \"UTC\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Step 4: Equipment Status Monitor\n\nTrack equipment running/stopped states from OPC UA and update the database:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION OPCUAEquipmentStatusMonitor\r\nON TOPIC \"opcua/simulator/AlternatingBoolean\" DO\r\n    SET \"is_running\" WITH (PAYLOAD AS BOOL)\r\n    SET \"timestamp\" WITH TIMESTAMP \"UTC\"\r\n    SET \"equipment_id\" WITH \"OPCUA-EQUIP-001\"\r\n    \r\n    // Track state changes\r\n    SET \"previous_state\" WITH (GET TOPIC \"manufacturing/equipment/previous_state\")\r\n    \r\n    IF {is_running} EQUALS TRUE THEN\r\n        SET \"status\" WITH \"RUNNING\"\r\n        SET \"health_score\" WITH 95.0\r\n        \r\n        // Increment runtime (simplified - 1 second per update)\r\n        SET \"runtime\" WITH (GET TOPIC \"manufacturing/equipment/runtime_hours\" AS DOUBLE)\r\n        SET \"new_runtime\" WITH ({runtime} + 0.0003)  // ~1 second in hours\r\n        PUBLISH TOPIC \"manufacturing/equipment/runtime_hours\" WITH {new_runtime}\r\n        \r\n        // Record start event if state changed\r\n        IF {previous_state} EQUALS \"STOPPED\" THEN\r\n            PUBLISH TOPIC \"manufacturing/equipment/started_at\" WITH {timestamp}\r\n            PUBLISH TOPIC \"manufacturing/equipment/start_count\" WITH (GET TOPIC \"manufacturing/equipment/start_count\" AS INT + 1)\r\n    ELSE\r\n        SET \"status\" WITH \"STOPPED\"\r\n        SET \"health_score\" WITH 50.0\r\n        SET \"new_runtime\" WITH (GET TOPIC \"manufacturing/equipment/runtime_hours\" AS DOUBLE)\r\n        \r\n        // Record stop event if state changed\r\n        IF {previous_state} EQUALS \"RUNNING\" THEN\r\n            PUBLISH TOPIC \"manufacturing/equipment/stopped_at\" WITH {timestamp}\r\n            PUBLISH TOPIC \"manufacturing/equipment/stop_count\" WITH (GET TOPIC \"manufacturing/equipment/stop_count\" AS INT + 1)\r\n    \r\n    // Update current state\r\n    PUBLISH TOPIC \"manufacturing/equipment/previous_state\" WITH {status}\r\n    PUBLISH TOPIC \"manufacturing/equipment/status\" WITH {status}\r\n    \r\n    // Update database with current equipment status\r\n    PUBLISH TOPIC \"db/equipment/update\" WITH {\r\n        \"equipment_id\": {equipment_id},\r\n        \"status\": {status},\r\n        \"runtime_hours\": {new_runtime},\r\n        \"health_score\": {health_score}\r\n    }"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Step 5: Periodic Data Historian (Batch Recording)\n\nFor high-frequency data, use a timed action to batch records:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION OPCUADataHistorian\r\nON EVERY 30 SECONDS DO\r\n    // Gather all current OPC UA values\r\n    SET \"temperature\" WITH (GET TOPIC \"opcua/simulator/PositiveTrendData\" AS DOUBLE)\r\n    SET \"pressure\" WITH (GET TOPIC \"opcua/simulator/NegativeTrendData\" AS DOUBLE)\r\n    SET \"cycle_count\" WITH (GET TOPIC \"opcua/simulator/SlowUInt1\" AS INT)\r\n    SET \"fast_count\" WITH (GET TOPIC \"opcua/simulator/FastUInt1\" AS INT)\r\n    SET \"timestamp\" WITH TIMESTAMP \"UTC\"\r\n    \r\n    // Store temperature reading\r\n    PUBLISH TOPIC \"manufacturing/db/sensor/record\" WITH {\r\n        \"sensor_id\": \"OPCUA-TEMP-HIST\",\r\n        \"sensor_type\": \"temperature\",\r\n        \"value\": {temperature},\r\n        \"unit\": \"C\",\r\n        \"location\": \"Factory Floor\",\r\n        \"quality\": \"GOOD\"\r\n    }\r\n    \r\n    // Store pressure reading (using negative trend as pressure simulation)\r\n    SET \"pressure_value\" WITH (50 + {pressure})  // Normalize to positive pressure\r\n    PUBLISH TOPIC \"manufacturing/db/sensor/record\" WITH {\r\n        \"sensor_id\": \"OPCUA-PRES-HIST\",\r\n        \"sensor_type\": \"pressure\",\r\n        \"value\": {pressure_value},\r\n        \"unit\": \"bar\",\r\n        \"location\": \"Factory Floor\",\r\n        \"quality\": \"GOOD\"\r\n    }\r\n    \r\n    // Publish historian status\r\n    PUBLISH TOPIC \"manufacturing/historian/last_record\" WITH {timestamp}\r\n    PUBLISH TOPIC \"manufacturing/historian/records_count\" WITH (GET TOPIC \"manufacturing/historian/records_count\" AS INT + 2)\r\n    \r\n    // Request trend analysis from database\r\n    PUBLISH TOPIC \"manufacturing/db/sensor/trend\" WITH {\"sensor_id\": \"OPCUA-TEMP-HIST\"}"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Testing the Manufacturing Integration\n\n**Prerequisites:**\n1. Ensure OPC UA simulator is running: `docker-compose up -d opcua`\n2. Ensure PostgreSQL is running: `docker-compose up -d postgres`\n3. Ensure the OPC UA Flux Asset is configured in Coreflux to publish to `opcua/simulator/#`\n\n**Test Steps:**\n\n1. **Deploy the ManufacturingDB route** (execute the route definition above)\n\n2. **Deploy the actions** (execute each action definition)\n\n3. **Monitor the data flow:**\n```\nSubscribe to: manufacturing/#\n```\n\n4. **Verify database records:**\n```\nPublish to: db/sensors/stats\nPayload: {}\n```\n\n5. **View in Adminer:**\n   - Open http://localhost:8080\n   - Check `sensor_readings` table for OPC UA data\n   - Check `production_records` for cycle completions\n   - Check `alarms` for temperature alerts\n\n**Expected Results:**\n- Sensor readings stored every 30 seconds\n- Alarms created when temperature exceeds 80°C\n- Production cycles recorded when counter reaches target\n- Equipment status updated in real-time\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Exercises\n\n### Exercise 1: Traceability System\n**Task**: Create a database route for the `traceability` table that:\n- Creates new parts with `INSERT`\n- Updates part status with `UPDATE`\n- Queries parts by batch_id"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 1: Write your solution here\r\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 2: Combined Query\n**Task**: Create an event that joins `production_records` and `quality_results` to show production batches with their quality status."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 2: Write your solution here\r\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 3: Action + Database Integration\n**Task**: Create a LoT action that:\n- Listens to `sensors/+/reading`\n- Publishes to `db/sensors/record` to store the reading\n- Generates an alarm if value exceeds threshold"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 3: Write your solution here\r\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 4: OPC UA Production Shift Report\n**Task**: Create a complete shift reporting system that:\n- Monitors OPC UA counter data from `opcua/simulator/SlowUInt1`\n- Calculates hourly production rates\n- At the end of each shift (every 8 hours simulation or use 2 minutes for testing), stores a shift summary:\n  - Total parts produced\n  - Average parts per hour\n  - Minimum and maximum rates\n  - Equipment uptime percentage\n- Stores the shift report in the `production_records` table\n- Generates a quality inspection record if production rate drops below target\n\n**Hint**: Use `ON EVERY` for periodic calculations and combine with the ManufacturingDB route"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 4: Write your OPC UA shift report solution here\r\n// Consider:\r\n// 1. Timed action for shift boundary detection\r\n// 2. Variables to track shift start values\r\n// 3. Calculations for rates and uptime\r\n// 4. Database storage for reports\r\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Checkpoint Questions\n\n1. **What's the syntax for extracting JSON fields in SQL queries?**\n   - Answer: Use `{payload.json.field_name}` syntax\n\n2. **What does DESTINATION_TOPIC do in database events?**\n   - Answer: Query results are published to this topic\n\n3. **How do you connect to the training database?**\n   - Answer: Server `lot_postgres`, Database `lot_training`, User `lot_user`\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Database Access via Adminer\n\nYou can view and manage the database using Adminer:\n\n1. Open http://localhost:8080\n2. Select \"PostgreSQL\" as the system\n3. Enter:\n   - Server: `postgres` (or `lot_postgres`)\n   - Username: `lot_user`\n   - Password: `lot_training_pass`\n   - Database: `lot_training`\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Summary\n\n### Key Concepts Learned\n- Database routes connect LoT to PostgreSQL\n- Events execute SQL queries triggered by MQTT topics\n- `{payload.json.field}` extracts data from JSON payloads\n- Results are published to destination topics\n- CRUD operations work seamlessly via MQTT\n\n### Important Notes\n- Use `lot_postgres` as the server name within Docker network\n- Use `localhost` when connecting from outside Docker\n- The training database has pre-populated sample data\n\n---\n\n**Next Tutorial:** [Simple Python](../05-python/simple-python.lotnb) - Learn Python integration with LoT"
+  }
+]

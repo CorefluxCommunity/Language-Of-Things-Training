@@ -1,0 +1,127 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# MQTT Bridge - Connecting Systems\n\n[⬅️ Previous: Model Inheritance](../03-models/model-inheritance.lotnb) | [🏠 Back to Index](../index.lotnb) | [➡️ Next: Database Routes](./database-routes.lotnb)\n\n---\n\n<details>\n<summary><strong>Navigation Menu</strong></summary>\n\n| Section | Tutorials |\n|---------|----------|\n| **Setup** | [Environment Setup](../00-setup/verify-environment.lotnb) |\n| **Basics** | [Timed Actions](../01-basics/timed-actions.lotnb) \\| [Topic Actions](../01-basics/topic-actions.lotnb) |\n| **Logic** | [Conditional Logic](../02-logic/conditional-logic.lotnb) |\n| **Models** | [Basic Models](../03-models/basic-models.lotnb) \\| [Action Models](../03-models/action-models.lotnb) \\| [Inheritance](../03-models/model-inheritance.lotnb) |\n| **Routes** | [MQTT Bridge](./mqtt-bridge.lotnb) \\| [Database](./database-routes.lotnb) |\n| **Python** | [Simple](../05-python/simple-python.lotnb) \\| [Advanced](../05-python/advanced-python.lotnb) |\n\n</details>\n\n---\n\n> **CAUTION - Free Tier Resource Limits**\n>\n> The free version of Coreflux has resource limits:\n> - **Routes**: 2 maximum\n> - **Actions**: 12 maximum\n> - **Models**: 40 maximum\n>\n> Delete unused resources before creating new ones during exercises.\n> **This tutorial uses bridge routes - remember you only have 2 route slots!**\n\n---\n\n## Learning Objectives\n\nIn this tutorial, you will learn:\n- How to create MQTT bridge routes between brokers\n- Connecting to the secondary Mosquitto broker (Docker)\n- Connecting to the Coreflux public cloud broker\n- Topic mapping and transformation\n- Bidirectional communication setup\n- Edge-to-cloud connectivity patterns\n\n---\n\n## Prerequisites\n\nEnsure the Mosquitto broker is running:\n\n```bash\ncd setup\ndocker-compose up -d mosquitto\ndocker-compose ps\n```\n\n**Available Brokers:**\n\n| Broker | Host | Port | Purpose |\n|--------|------|------|--------|\n| Coreflux (Primary) | `coreflux_broker` | 1883 | Main LoT broker |\n| Mosquitto (Secondary) | `mosquitto_bridge` | 1883 (internal) / 1884 (external) | Bridge testing |\n| Coreflux Public | `iot.coreflux.cloud` | 1883 | Cloud demos |\n\n> **WARNING:** The public broker is visible to everyone - don't send sensitive data!\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Example 1: Bridge to Secondary Broker (Working Example)\n\nThis route connects Coreflux to the local Mosquitto broker:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE LocalBridge WITH TYPE MQTT_BRIDGE\r\n    ADD SOURCE_CONFIG\r\n        WITH BROKER_ADDRESS \"coreflux_broker\"\r\n        WITH BROKER_PORT '1883'\r\n        WITH CLIENT_ID \"Coreflux_Bridge_Source\"\r\n    ADD DESTINATION_CONFIG\r\n        WITH BROKER_ADDRESS \"mosquitto_bridge\"\r\n        WITH BROKER_PORT '1883'\r\n        WITH CLIENT_ID \"Mosquitto_Bridge_Dest\"\r\n    ADD MAPPING training_data\r\n        WITH SOURCE_TOPIC \"training/#\"\r\n        WITH DESTINATION_TOPIC \"bridged/training/#\"\r\n        WITH DIRECTION \"out\"\r\n    ADD MAPPING commands_in\r\n        WITH SOURCE_TOPIC \"bridged/commands/#\"\r\n        WITH DESTINATION_TOPIC \"commands/#\"\r\n        WITH DIRECTION \"in\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test this example:**\n\n1. Start the bridge route (execute above)\n\n2. Subscribe to Mosquitto on your host:\n```bash\nmosquitto_sub -h localhost -p 1884 -t \"bridged/#\" -v\n```\n\n3. Publish to Coreflux:\n```\nPublish to: training/test/message\nPayload: Hello from Coreflux!\n```\n\n4. The message should appear on Mosquitto at `bridged/training/test/message`\n\n**Bidirectional Test:**\n```bash\nmosquitto_pub -h localhost -p 1884 -t \"bridged/commands/test\" -m \"Command from Mosquitto\"\n```\n\nThis should appear on Coreflux at `commands/test`\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Example 2: Bridge to Coreflux Public Cloud\n\nConnect to the public Coreflux cloud broker for cloud demos:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE CloudBridge WITH TYPE MQTT_BRIDGE\r\n    ADD SOURCE_CONFIG\r\n        WITH BROKER_ADDRESS \"coreflux_broker\"\r\n        WITH BROKER_PORT '1883'\r\n        WITH CLIENT_ID \"LocalFactory_Source\"\r\n    ADD DESTINATION_CONFIG\r\n        WITH BROKER_ADDRESS \"iot.coreflux.cloud\"\r\n        WITH BROKER_PORT '1883'\r\n        WITH CLIENT_ID \"CloudFactory_Training_1\"\r\n        WITH RECONNECTION_RETRIES 5\r\n    ADD MAPPING sensor_data\r\n        WITH SOURCE_TOPIC \"factory/sensors/#\"\r\n        WITH DESTINATION_TOPIC \"training/factory/sensors/#\"\r\n        WITH DIRECTION \"out\"\r\n    ADD MAPPING production_data\r\n        WITH SOURCE_TOPIC \"factory/production/#\"\r\n        WITH DESTINATION_TOPIC \"training/factory/production/#\"\r\n        WITH DIRECTION \"out\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test this example:**\n\n1. Subscribe to the public broker (from any MQTT client):\n```bash\nmosquitto_sub -h iot.coreflux.cloud -p 1883 -t \"training/factory/#\" -v\n```\n\n2. Publish sensor data locally:\n```\nPublish to: factory/sensors/temp001/reading\nPayload: {\"temperature\": 72.5, \"unit\": \"C\", \"timestamp\": \"2025-01-28T10:00:00Z\"}\n```\n\n3. The message should appear on the public cloud broker\n\n> **Remember:** All messages on the public broker are visible to everyone!\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Example 3: Processing Bridged Data\n\nCreate an action that processes data received from the bridge:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION ProcessBridgedCommands\r\nON TOPIC \"commands/+/execute\" DO\r\n    SET \"command_type\" WITH TOPIC POSITION 2\r\n    SET \"command_time\" WITH TIMESTAMP \"UTC\"\r\n    \r\n    // Log all incoming commands\r\n    PUBLISH TOPIC \"logs/commands/received\" WITH \"Command: \" + {command_type} + \" at \" + {command_time}\r\n    \r\n    // Route based on command type\r\n    IF {command_type} EQUALS \"start\" THEN\r\n        PUBLISH TOPIC \"equipment/action\" WITH \"STARTING\"\r\n        PUBLISH TOPIC \"commands/response\" WITH \"Start command acknowledged\"\r\n    ELSE IF {command_type} EQUALS \"stop\" THEN\r\n        PUBLISH TOPIC \"equipment/action\" WITH \"STOPPING\"\r\n        PUBLISH TOPIC \"commands/response\" WITH \"Stop command acknowledged\"\r\n    ELSE IF {command_type} EQUALS \"status\" THEN\r\n        SET \"current_status\" WITH GET TOPIC \"equipment/status\"\r\n        PUBLISH TOPIC \"commands/response\" WITH \"Current status: \" + {current_status}\r\n    ELSE\r\n        PUBLISH TOPIC \"commands/response\" WITH \"Unknown command: \" + {command_type}"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Processes commands received via the bridge from Mosquitto\n- Routes commands based on type (start, stop, status)\n- Sends responses back (which can be bridged back)\n- Demonstrates command/response pattern with bridged systems\n\n**Test it:**\n```bash\n# From Mosquitto, send a command\nmosquitto_pub -h localhost -p 1884 -t \"bridged/commands/start/execute\" -m \"go\"\n```\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Example 4: Sensor Data Aggregation with Bridge\n\nCreate a model that aggregates data and forwards via bridge:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL FactorySensorSummary\r\n    ADD \"factory_id\" AS STRING FROM TOPIC \"config/factory_id\"\r\n    ADD \"temperature\" AS DOUBLE FROM TOPIC \"sensors/temperature/value\" AS TRIGGER\r\n    ADD \"pressure\" AS DOUBLE FROM TOPIC \"sensors/pressure/value\"\r\n    ADD \"humidity\" AS DOUBLE FROM TOPIC \"sensors/humidity/value\"\r\n    ADD \"timestamp\" AS STRING FROM TOPIC \"sensors/timestamp\"\r\n    PUBLISH TO \"factory/sensors/summary\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Aggregates multiple sensor values into a single JSON object\n- When temperature changes, publishes to `factory/sensors/summary`\n- The bridge automatically forwards this to Mosquitto or cloud\n- Demonstrates model + bridge integration pattern\n\n**Test it:**\n1. Set sensor values:\n```\nconfig/factory_id: \"FACTORY-001\"\nsensors/pressure/value: 4.5\nsensors/humidity/value: 65.0\nsensors/timestamp: \"2025-01-28T10:00:00Z\"\n```\n\n2. Trigger with temperature:\n```\nsensors/temperature/value: 72.5\n```\n\n3. Check `factory/sensors/summary` - it will be bridged automatically\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Example 5: Multi-Site Architecture\n\nA pattern for connecting multiple sites to headquarters:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE SiteToHQBridge WITH TYPE MQTT_BRIDGE\r\n    ADD SOURCE_CONFIG\r\n        WITH BROKER_ADDRESS \"coreflux_broker\"\r\n        WITH BROKER_PORT '1883'\r\n        WITH CLIENT_ID \"Site_A_Bridge\"\r\n    ADD DESTINATION_CONFIG\r\n        WITH BROKER_ADDRESS \"iot.coreflux.cloud\"\r\n        WITH BROKER_PORT '1883'\r\n        WITH CLIENT_ID \"HQ_SiteA_\" + RANDOM UUID\r\n        WITH RECONNECTION_RETRIES 10\r\n    ADD MAPPING production_out\r\n        WITH SOURCE_TOPIC \"site/production/#\"\r\n        WITH DESTINATION_TOPIC \"headquarters/siteA/production/#\"\r\n        WITH DIRECTION \"out\"\r\n    ADD MAPPING quality_out\r\n        WITH SOURCE_TOPIC \"site/quality/#\"\r\n        WITH DESTINATION_TOPIC \"headquarters/siteA/quality/#\"\r\n        WITH DIRECTION \"out\"\r\n    ADD MAPPING alarms_out\r\n        WITH SOURCE_TOPIC \"site/alarms/#\"\r\n        WITH DESTINATION_TOPIC \"headquarters/siteA/alarms/#\"\r\n        WITH DIRECTION \"out\"\r\n    ADD MAPPING directives_in\r\n        WITH SOURCE_TOPIC \"headquarters/siteA/directives/#\"\r\n        WITH DESTINATION_TOPIC \"site/directives/#\"\r\n        WITH DIRECTION \"in\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Architecture Pattern:**\n```\n┌─────────────────┐          ┌─────────────────┐\n│   Site A        │          │  Headquarters   │\n│   (Coreflux)    │   ───►   │  (Cloud Broker) │\n│                 │          │                 │\n│ site/production │  ───►    │ hq/siteA/prod   │\n│ site/quality    │  ───►    │ hq/siteA/qual   │\n│ site/alarms     │  ───►    │ hq/siteA/alarms │\n│ site/directives │  ◄───    │ hq/siteA/dir    │\n└─────────────────┘          └─────────────────┘\n```\n\n**Key Features:**\n- Production data flows OUT to headquarters\n- Quality data flows OUT to headquarters\n- Alarms flow OUT for central monitoring\n- Directives flow IN from headquarters to site\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Exercises\n\n### Exercise 1: Bidirectional Bridge\n**Task**: Create a bridge called `EquipmentBridge` that:\n- Forwards `equipment/status/#` to Mosquitto\n- Receives `equipment/commands/#` from Mosquitto\n- Uses proper client IDs for both connections"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 1: Write your solution here\r\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 2: Data Transformation Action\n**Task**: Create an action that:\n- Listens to `bridged/raw/data`\n- Transforms the data format\n- Publishes to `processed/data` (which gets bridged)"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 2: Write your solution here\r\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 3: Cloud Monitoring\n**Task**: Create a periodic action that:\n- Runs every 30 seconds\n- Gathers system health metrics\n- Publishes to a topic that gets bridged to cloud"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 3: Write your solution here\r\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Checkpoint Questions\n\n1. **What's the difference between SOURCE_CONFIG and DESTINATION_CONFIG?**\n   - Answer: SOURCE_CONFIG is where data comes from, DESTINATION_CONFIG is where it goes\n\n2. **How do you make a bidirectional bridge?**\n   - Answer: Add multiple mappings with different DIRECTION values (\"in\" and \"out\")\n\n3. **What port does Mosquitto use externally in our setup?**\n   - Answer: Port 1884 (maps to internal port 1883)\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Summary\n\n### Key Concepts Learned\n- MQTT bridges connect different brokers\n- SOURCE_CONFIG and DESTINATION_CONFIG define endpoints\n- MAPPING defines topic transformation and direction\n- Direction options: \"out\", \"in\", or \"both\"\n- Actions can process bridged data\n\n### Available Brokers for Testing\n| Broker | Use Case |\n|--------|----------|\n| `mosquitto_bridge` (port 1884) | Local bridge testing |\n| `iot.coreflux.cloud` (port 1883) | Cloud demonstrations |\n\n---\n\n**Next Tutorial:** [Database Routes](./database-routes.lotnb) - Learn data persistence with PostgreSQL"
+  }
+]

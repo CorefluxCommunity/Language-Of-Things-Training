@@ -1,0 +1,187 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# Model Inheritance - Extending and Reusing Models\n\n[⬅️ Previous: Action Models](./action-models.lotnb) | [🏠 Back to Index](../index.lotnb) | [➡️ Next: MQTT Bridge](../04-routes/mqtt-bridge.lotnb)\n\n---\n\n<details>\n<summary><strong>Navigation Menu</strong></summary>\n\n| Section | Tutorials |\n|---------|----------|\n| **Setup** | [Environment Setup](../00-setup/verify-environment.lotnb) |\n| **Basics** | [Timed Actions](../01-basics/timed-actions.lotnb) \\| [Topic Actions](../01-basics/topic-actions.lotnb) |\n| **Logic** | [Conditional Logic](../02-logic/conditional-logic.lotnb) |\n| **Models** | [Basic Models](./basic-models.lotnb) \\| [Action Models](./action-models.lotnb) \\| [Inheritance](./model-inheritance.lotnb) |\n| **Routes** | [MQTT Bridge](../04-routes/mqtt-bridge.lotnb) \\| [Database](../04-routes/database-routes.lotnb) |\n| **Python** | [Simple](../05-python/simple-python.lotnb) \\| [Advanced](../05-python/advanced-python.lotnb) |\n\n</details>\n\n---\n\n> **CAUTION - Free Tier Resource Limits**\n>\n> The free version of Coreflux has resource limits:\n> - **Routes**: 2 maximum\n> - **Actions**: 12 maximum\n> - **Models**: 40 maximum\n>\n> Delete unused resources before creating new ones during exercises.\n\n---\n\n## Learning Objectives\n\nIn this tutorial, you will learn:\n- How to extend existing models with the `FROM` keyword\n- Creating base models for common functionality\n- Specialized models that inherit from base models\n- Building model hierarchies for complex systems\n- Reusing common fields across different data types\n- Best practices for model organization\n\n---\n\n## 📖 Introduction\n\n**Model Inheritance** allows you to create model families that share common characteristics while adding specialized functionality. This enables:\n- Code reuse and consistency\n- Easier maintenance and updates\n- Logical organization of related data types\n- Polymorphic data handling\n\n### Real-World Applications\n- **Alert Systems**: Base alert model with specialized alarm types\n- **Sensor Data**: Common sensor fields with type-specific measurements\n- **Equipment Models**: Shared equipment properties with machine-specific data\n- **Event Tracking**: Base event structure with specialized event types\n\n---\n\n## 🧠 Core Concepts\n\n### Inheritance Syntax\n\n```lot\nDEFINE MODEL ChildModel FROM ParentModel\n    // Child inherits all parent fields\n    ADD STRING \"additional_field\"\n```\n\n### Inheritance Benefits\n\n1. **Field Inheritance**: Child models get all parent fields automatically\n2. **Consistency**: Common fields have the same structure across models\n3. **Maintainability**: Update parent model to affect all children\n4. **Specialization**: Add specific fields for different use cases\n\n### Model Hierarchies\n\n```\nBaseModel\n├── SpecializedModel1\n├── SpecializedModel2\n└── SpecializedModel3\n```\n\n---\n\n## 🛠️ Hands-On Examples\n\n### Example 1: Base Alert Model\n\nLet's start with a base model for all alerts:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL BaseAlert COLLAPSED\r\n    ADD STRING \"alert_id\" WITH (RANDOM UUID)\r\n    ADD STRING \"source_system\"\r\n    ADD STRING \"timestamp\"\r\n    ADD STRING \"severity\"\r\n    ADD STRING \"message\"\r\n    ADD BOOL \"acknowledged\"\r\n    ADD STRING \"acknowledged_by\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "Now let's create specialized alert models that inherit from BaseAlert:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL TemperatureAlert FROM BaseAlert\r\n    ADD DOUBLE \"temperature_value\"\r\n    ADD DOUBLE \"threshold_exceeded\"\r\n    ADD STRING \"sensor_location\"\r\n    ADD STRING \"unit\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL PressureAlert FROM BaseAlert\r\n    ADD DOUBLE \"pressure_value\"\r\n    ADD DOUBLE \"max_safe_pressure\"\r\n    ADD STRING \"pressure_unit\"\r\n    ADD STRING \"system_affected\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL MaintenanceAlert FROM BaseAlert\r\n    ADD STRING \"equipment_id\"\r\n    ADD STRING \"maintenance_type\"\r\n    ADD INT \"hours_since_last_service\"\r\n    ADD INT \"recommended_service_interval\"\r\n    ADD STRING \"priority_level\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "Now let's create actions that use these specialized models:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION SpecializedAlertGenerator\r\nON TOPIC \"sensors/+/+/alert\" DO\r\n    SET \"sensor_type\" WITH TOPIC POSITION 2\r\n    SET \"sensor_id\" WITH TOPIC POSITION 3\r\n    SET \"alert_data\" WITH PAYLOAD\r\n\r\n    IF {sensor_type} EQUALS \"temperature\" THEN\r\n        PUBLISH MODEL TemperatureAlert TO \"alerts/temperature/\" + {sensor_id} WITH\r\n            alert_id = (RANDOM UUID)\r\n            source_system = \"TemperatureMonitor\"\r\n            timestamp = TIMESTAMP \"UTC\"\r\n            severity = \"HIGH\"\r\n            message = \"Temperature threshold exceeded\"\r\n            acknowledged = FALSE\r\n            acknowledged_by = \"n/A\"\r\n            temperature_value = GET TOPIC \"sensors/temperature/\" + {sensor_id} + \"/current\"\r\n            threshold_exceeded = 75.0\r\n            sensor_location = GET TOPIC \"sensors/temperature/\" + {sensor_id} + \"/location\"\r\n            unit = \"celsius\"\r\n    \r\n    ELSE IF {sensor_type} EQUALS \"pressure\" THEN\r\n        PUBLISH MODEL PressureAlert TO \"alerts/pressure/\" + {sensor_id} WITH\r\n            alert_id = (RANDOM UUID)\r\n            source_system = \"PressureMonitor\"\r\n            timestamp = TIMESTAMP \"UTC\"\r\n            severity = \"CRITICAL\"\r\n            message = \"Pressure limit exceeded\"\r\n            acknowledged = FALSE\r\n            acknowledged_by = \"n/a\"\r\n            pressure_value = GET TOPIC \"sensors/pressure/\" + {sensor_id} + \"/current\"\r\n            max_safe_pressure = 100.0\r\n            pressure_unit = \"PSI\"\r\n            system_affected = GET TOPIC \"sensors/pressure/\" + {sensor_id} + \"/system\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Uses the same base alert structure for all alert types\n- Adds specialized fields for each sensor type\n- Maintains consistency in common fields (alert_id, timestamp, severity)\n- Enables different processing logic while keeping standard alert properties\n- Demonstrates polymorphic model usage\n\n**Benefits of Inheritance:**\n- **Consistency**: All alerts have the same base fields\n- **Specialization**: Each alert type has relevant specific fields\n- **Maintainability**: Changes to BaseAlert affect all alert types\n- **Processing**: Alert handlers can work with common fields across all types\n\n---\n\n### Example 2: Equipment Model Hierarchy\n\nLet's create a hierarchy for different equipment types:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL BaseEquipment COLLAPSED\r\n    ADD STRING \"equipment_id\"\r\n    ADD STRING \"equipment_name\"\r\n    ADD STRING \"location\"\r\n    ADD STRING \"status\"\r\n    ADD INT \"runtime_hours\"\r\n    ADD STRING \"last_maintenance\"\r\n    ADD STRING \"operator\"\r\n    ADD STRING \"timestamp\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL MotorEquipment FROM BaseEquipment\r\n    ADD INT \"rpm\"\r\n    ADD DOUBLE \"power_consumption\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL PumpEquipment FROM MotorEquipment\r\n    ADD DOUBLE \"flow_rate\"\r\n    ADD DOUBLE \"pressure_output\"\r\n    ADD STRING \"pump_type\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL ConveyorEquipment FROM BaseEquipment\r\n    ADD FLOAT \"belt_speed\"\r\n    ADD INT \"items_per_minute\"\r\n    ADD DOUBLE \"belt_tension\"\r\n    ADD BOOL \"emergency_stop_active\"\r\n    ADD STRING \"direction\"\r\n"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION EquipmentStatusReporter\r\nON TOPIC \"equipment/+/+/status_update\" DO\r\n    SET \"equipment_type\" WITH TOPIC POSITION 1\r\n    SET \"equipment_id\" WITH TOPIC POSITION 2\r\n    \r\n    // Common equipment data gathering\r\n    SET \"current_status\" WITH GET TOPIC \"equipment/\" + {equipment_type} + \"/\" + {equipment_id} + \"/status\"\r\n    SET \"runtime\" WITH GET TOPIC \"equipment/\" + {equipment_type} + \"/\" + {equipment_id} + \"/runtime\"\r\n    SET \"operator\" WITH GET TOPIC \"equipment/\" + {equipment_type} + \"/\" + {equipment_id} + \"/operator\"\r\n    \r\n    // Generate specialized equipment reports\r\n    IF {equipment_type} EQUALS \"pump\" THEN\r\n        PUBLISH MODEL PumpEquipment TO \"equipment/reports/pump/\" + {equipment_id} WITH\r\n            equipment_id = {equipment_id}\r\n            equipment_name = GET TOPIC \"equipment/pump/\" + {equipment_id} + \"/name\"\r\n            location = GET TOPIC \"equipment/pump/\" + {equipment_id} + \"/location\"\r\n            status = {current_status}\r\n            runtime_hours = {runtime}\r\n            last_maintenance = GET TOPIC \"equipment/pump/\" + {equipment_id} + \"/last_service\"\r\n            operator = {operator}\r\n            timestamp = TIMESTAMP \"UTC\"\r\n            flow_rate = GET TOPIC \"equipment/pump/\" + {equipment_id} + \"/flow_rate\"\r\n            pressure_output = GET TOPIC \"equipment/pump/\" + {equipment_id} + \"/pressure\"\r\n            rpm = GET TOPIC \"equipment/pump/\" + {equipment_id} + \"/rpm\"\r\n            power_consumption = GET TOPIC \"equipment/pump/\" + {equipment_id} + \"/power\"\r\n            pump_type = \"Centrifugal\"\r\n    \r\n    ELSE IF {equipment_type} EQUALS \"conveyor\" THEN\r\n        PUBLISH MODEL ConveyorEquipment TO \"equipment/reports/conveyor/\" + {equipment_id} WITH\r\n            equipment_id = {equipment_id}\r\n            equipment_name = GET TOPIC \"equipment/conveyor/\" + {equipment_id} + \"/name\"\r\n            location = GET TOPIC \"equipment/conveyor/\" + {equipment_id} + \"/location\"\r\n            status = {current_status}\r\n            runtime_hours = {runtime}\r\n            last_maintenance = GET TOPIC \"equipment/conveyor/\" + {equipment_id} + \"/last_service\"\r\n            operator = {operator}\r\n            timestamp = TIMESTAMP \"UTC\"\r\n            belt_speed = GET TOPIC \"equipment/conveyor/\" + {equipment_id} + \"/speed\"\r\n            items_per_minute = GET TOPIC \"equipment/conveyor/\" + {equipment_id} + \"/throughput\"\r\n            belt_tension = GET TOPIC \"equipment/conveyor/\" + {equipment_id} + \"/tension\"\r\n            emergency_stop_active = GET TOPIC \"equipment/conveyor/\" + {equipment_id} + \"/estop\"\r\n            direction = GET TOPIC \"equipment/conveyor/\" + {equipment_id} + \"/direction\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Creates a base equipment model with common fields\n- Extends it for specific equipment types (pumps, conveyors)\n- Uses one action to handle multiple equipment types\n- Generates specialized reports while maintaining common structure\n- Demonstrates practical model inheritance usage\n\n**Inheritance Benefits:**\n- **Code Reuse**: Common fields defined once in BaseEquipment\n- **Consistency**: All equipment reports have the same base structure\n- **Extensibility**: Easy to add new equipment types\n- **Maintenance**: Update base model affects all equipment types\n\n---\n\n### Example 3: Event Model Hierarchy\n\nLet's create a comprehensive event tracking system:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL BaseEvent COLLAPSED\r\n    ADD STRING \"event_id\"\r\n    ADD STRING \"event_category\"\r\n    ADD STRING \"source\"\r\n    ADD STRING \"timestamp\"\r\n    ADD STRING \"severity\"\r\n    ADD STRING \"description\"\r\n    ADD OBJECT \"metadata\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL ProductionEvent FROM BaseEvent\r\n    ADD STRING \"line_id\"\r\n    ADD STRING \"batch_id\"\r\n    ADD INT \"parts_affected\"\r\n    ADD STRING \"operator\"\r\n    ADD FLOAT \"production_impact\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL MaintenanceEvent FROM BaseEvent\r\n    ADD STRING \"equipment_id\"\r\n    ADD STRING \"maintenance_type\"\r\n    ADD INT \"downtime_minutes\"\r\n    ADD STRING \"technician\"\r\n    ADD FLOAT \"cost_estimate\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL QualityEvent FROM BaseEvent\r\n    ADD STRING \"inspection_station\"\r\n    ADD STRING \"product_batch\"\r\n    ADD INT \"items_tested\"\r\n    ADD INT \"items_failed\"\r\n    ADD STRING \"failure_reason\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "Now let's create an action that generates different event types:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION ComprehensiveEventTracker\r\nON TOPIC \"events/+/+/occurred\" DO\r\n    SET \"event_category\" WITH TOPIC POSITION 1\r\n    SET \"event_subtype\" WITH TOPIC POSITION 2\r\n    \r\n    // Generate different event types based on category\r\n    IF {event_category} EQUALS \"production\" THEN\r\n        PUBLISH MODEL ProductionEvent TO \"events/structured/production/\" + {event_subtype} WITH\r\n            event_id = (RANDOM UUID)\r\n            event_category = \"PRODUCTION\"\r\n            source = \"ProductionSystem\"\r\n            timestamp = TIMESTAMP \"UTC\"\r\n            severity = IF PAYLOAD CONTAINS \"error\" THEN \"HIGH\" ELSE \"INFO\"\r\n            description = PAYLOAD\r\n            metadata = {\"system_version\": \"v2.1\", \"plant_id\": \"PLANT_001\"}\r\n            line_id = GET TOPIC \"production/current/line_id\"\r\n            batch_id = GET TOPIC \"production/current/batch_id\"\r\n            parts_affected = GET TOPIC \"production/current/parts_in_process\"\r\n            operator = GET TOPIC \"production/current/operator\"\r\n            production_impact = IF PAYLOAD CONTAINS \"stop\" THEN 100.0 ELSE 0.0\r\n    \r\n    ELSE IF {event_category} EQUALS \"maintenance\" THEN\r\n        PUBLISH MODEL MaintenanceEvent TO \"events/structured/maintenance/\" + {event_subtype} WITH\r\n            event_id = (RANDOM UUID)\r\n            event_category = \"MAINTENANCE\"\r\n            source = \"MaintenanceSystem\"\r\n            timestamp = TIMESTAMP \"UTC\"\r\n            severity = IF PAYLOAD CONTAINS \"emergency\" THEN \"CRITICAL\" ELSE \"MEDIUM\"\r\n            description = PAYLOAD\r\n            metadata = {\"maintenance_system\": \"CMMS_v3.2\", \"work_order\": \"WO-2025-001\"}\r\n            equipment_id = GET TOPIC \"maintenance/current/equipment_id\"\r\n            maintenance_type = {event_subtype}\r\n            downtime_minutes = GET TOPIC \"maintenance/current/estimated_downtime\"\r\n            technician = GET TOPIC \"maintenance/current/technician\"\r\n            cost_estimate = GET TOPIC \"maintenance/current/cost_estimate\"\r\n    \r\n    ELSE IF {event_category} EQUALS \"quality\" THEN\r\n        PUBLISH MODEL QualityEvent TO \"events/structured/quality/\" + {event_subtype} WITH\r\n            event_id = (RANDOM UUID)\r\n            event_category = \"QUALITY\"\r\n            source = \"QualitySystem\"\r\n            timestamp = TIMESTAMP \"UTC\"\r\n            severity = IF PAYLOAD CONTAINS \"fail\" THEN \"HIGH\" ELSE \"LOW\"\r\n            description = PAYLOAD\r\n            metadata = {\"qms_version\": \"v1.5\", \"standard\": \"ISO_9001\"}\r\n            inspection_station = GET TOPIC \"quality/current/station_id\"\r\n            product_batch = GET TOPIC \"quality/current/batch_id\"\r\n            items_tested = GET TOPIC \"quality/current/items_tested\"\r\n            items_failed = GET TOPIC \"quality/current/items_failed\"\r\n            failure_reason = GET TOPIC \"quality/current/failure_reason\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Creates a base event structure with common fields\n- Extends it for production, maintenance, and quality events\n- Each specialized model adds relevant fields for its domain\n- One action handles all event types while generating appropriate structures\n- Demonstrates practical model hierarchy usage\n\n**Test it:**\n```\nPublish to: events/production/line_stop/occurred\nPayload: \"Emergency stop activated\"\nResult in events/structured/production/line_stop:\n{\n  \"event_id\": \"e1v2e3n4-t5i6-7890-abcd-ef1234567890\",\n  \"event_category\": \"PRODUCTION\",\n  \"source\": \"ProductionSystem\",\n  \"timestamp\": \"2025-10-25T14:30:15Z\",\n  \"severity\": \"INFO\",\n  \"description\": \"Emergency stop activated\",\n  \"metadata\": {\"system_version\": \"v2.1\", \"plant_id\": \"PLANT_001\"},\n  \"line_id\": \"LINE_001\",\n  \"batch_id\": \"BATCH_2025_001\",\n  \"parts_affected\": 50,\n  \"operator\": \"John Smith\",\n  \"production_impact\": 100.0\n}\n```\n\n---\n\n### Example 4: Sensor Model Family\n\nLet's create a comprehensive sensor model hierarchy:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL BaseSensor COLLAPSED\r\n    ADD STRING \"sensor_id\"\r\n    ADD STRING \"sensor_name\"\r\n    ADD STRING \"location\"\r\n    ADD STRING \"status\"\r\n    ADD STRING \"last_calibration\"\r\n    ADD BOOL \"calibration_valid\"\r\n    ADD STRING \"timestamp\"\r\n    ADD INT \"reading_count\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL TemperatureSensor FROM BaseSensor\r\n    ADD FLOAT \"temperature\"\r\n    ADD STRING \"temperature_unit\"\r\n    ADD FLOAT \"min_range\"\r\n    ADD FLOAT \"max_range\"\r\n    ADD FLOAT \"accuracy\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL PressureSensor FROM BaseSensor\r\n    ADD FLOAT \"pressure\"\r\n    ADD STRING \"pressure_unit\"\r\n    ADD FLOAT \"max_working_pressure\"\r\n    ADD STRING \"connection_type\"\r\n    ADD BOOL \"overpressure_protection\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL FlowSensor FROM BaseSensor\r\n    ADD FLOAT \"flow_rate\"\r\n    ADD STRING \"flow_unit\"\r\n    ADD FLOAT \"pipe_diameter\"\r\n    ADD STRING \"fluid_type\"\r\n    ADD FLOAT \"viscosity\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "Now let's create an action that publishes different sensor types:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION SensorDataPublisher\r\nON TOPIC \"sensors/+/+/reading\" DO\r\n    SET \"sensor_type\" WITH TOPIC POSITION 1\r\n    SET \"sensor_id\" WITH TOPIC POSITION 2\r\n    SET \"reading_value\" WITH PAYLOAD\r\n    \r\n    // Update reading count\r\n    SET \"current_count\" WITH (GET TOPIC \"sensors/\" + {sensor_type} + \"/\" + {sensor_id} + \"/count\" + 1)\r\n    PUBLISH TOPIC \"sensors/\" + {sensor_type} + \"/\" + {sensor_id} + \"/count\" WITH {current_count}\r\n    \r\n    // Publish appropriate sensor model\r\n    IF {sensor_type} EQUALS \"temperature\" THEN\r\n        PUBLISH MODEL TemperatureSensor TO \"sensors/structured/temperature/\" + {sensor_id} WITH\r\n            sensor_id = {sensor_id}\r\n            sensor_name = GET TOPIC \"sensors/temperature/\" + {sensor_id} + \"/name\"\r\n            location = GET TOPIC \"sensors/temperature/\" + {sensor_id} + \"/location\"\r\n            status = \"ACTIVE\"\r\n            last_calibration = GET TOPIC \"sensors/temperature/\" + {sensor_id} + \"/last_cal\"\r\n            calibration_valid = TRUE\r\n            timestamp = TIMESTAMP \"UTC\"\r\n            reading_count = {current_count}\r\n            temperature = {reading_value}\r\n            temperature_unit = \"celsius\"\r\n            min_range = -50.0\r\n            max_range = 150.0\r\n            accuracy = 0.1\r\n    \r\n    ELSE IF {sensor_type} EQUALS \"pressure\" THEN\r\n        PUBLISH MODEL PressureSensor TO \"sensors/structured/pressure/\" + {sensor_id} WITH\r\n            sensor_id = {sensor_id}\r\n            sensor_name = GET TOPIC \"sensors/pressure/\" + {sensor_id} + \"/name\"\r\n            location = GET TOPIC \"sensors/pressure/\" + {sensor_id} + \"/location\"\r\n            status = \"ACTIVE\"\r\n            last_calibration = GET TOPIC \"sensors/pressure/\" + {sensor_id} + \"/last_cal\"\r\n            calibration_valid = TRUE\r\n            timestamp = TIMESTAMP \"UTC\"\r\n            reading_count = {current_count}\r\n            pressure = {reading_value}\r\n            pressure_unit = \"PSI\"\r\n            max_working_pressure = 150.0\r\n            connection_type = \"NPT 1/4\"\r\n            overpressure_protection = TRUE\r\n    \r\n    ELSE IF {sensor_type} EQUALS \"flow\" THEN\r\n        PUBLISH MODEL FlowSensor TO \"sensors/structured/flow/\" + {sensor_id} WITH\r\n            sensor_id = {sensor_id}\r\n            sensor_name = GET TOPIC \"sensors/flow/\" + {sensor_id} + \"/name\"\r\n            location = GET TOPIC \"sensors/flow/\" + {sensor_id} + \"/location\"\r\n            status = \"ACTIVE\"\r\n            last_calibration = GET TOPIC \"sensors/flow/\" + {sensor_id} + \"/last_cal\"\r\n            calibration_valid = TRUE\r\n            timestamp = TIMESTAMP \"UTC\"\r\n            reading_count = {current_count}\r\n            flow_rate = {reading_value}\r\n            flow_unit = \"L/min\"\r\n            pipe_diameter = GET TOPIC \"sensors/flow/\" + {sensor_id} + \"/pipe_diameter\"\r\n            fluid_type = GET TOPIC \"sensors/flow/\" + {sensor_id} + \"/fluid\"\r\n            viscosity = GET TOPIC \"sensors/flow/\" + {sensor_id} + \"/viscosity\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Creates a family of sensor models with shared base properties\n- Each sensor type adds specific measurement fields\n- One action handles all sensor types while generating appropriate structures\n- Maintains reading counters across all sensor types\n- Provides comprehensive sensor data with type-specific details\n- Demonstrates scalable model architecture\n\n**Hierarchy Benefits:**\n- **Scalability**: Easy to add new sensor types\n- **Consistency**: All sensors share common management fields\n- **Specialization**: Each sensor type has relevant technical fields\n- **Processing**: Common sensor operations work across all types\n\n---\n\n## 🏋️ Exercises\n\n### Exercise 1: Vehicle Model Hierarchy\n**Task**: Create a vehicle tracking system:\n- Base model: `BaseVehicle` with id, name, location, status, fuel_level, driver\n- Specialized models: `TruckVehicle` (cargo_weight, max_capacity), `ForkliftVehicle` (lift_height, load_capacity)\n- Action: Process `vehicles/+/+/update` and publish appropriate vehicle model"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 1: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 2: Alert Severity Hierarchy\n**Task**: Create an alert system with severity levels:\n- Base model: `BaseAlert` with basic alert fields\n- Specialized models: `InfoAlert`, `WarningAlert`, `CriticalAlert` (each with severity-specific fields)\n- Action: Route alerts based on severity level in payload"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 2: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 3: Product Model Family\n**Task**: Create a product tracking system:\n- Base model: `BaseProduct` with product_id, name, category, price, timestamp\n- Specialized models: `ElectronicsProduct` (warranty, model_number), `FoodProduct` (expiry_date, batch_number)\n- Action: Process product updates and generate appropriate product records"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 3: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 4: Multi-Level Inheritance\n**Task**: Create a three-level model hierarchy:\n- Level 1: `BaseEntity` (id, name, timestamp)\n- Level 2: `BaseEquipment FROM BaseEntity` (location, status, operator)\n- Level 3: `RotatingEquipment FROM BaseEquipment` (rpm, vibration, temperature)\n- Create models for specific rotating equipment (pumps, motors, fans)\n\n**Challenge**: Create an action that can handle any level of the hierarchy."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 4: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "\n\n---\n\n## 🎯 Checkpoint Questions\n\n1. **What does the `FROM` keyword do in model definitions?**\n   - Answer: It creates inheritance, where the child model gets all fields from the parent model\n\n2. **Can you inherit from a model that also inherits from another model?**\n   - Answer: Yes, LoT supports multi-level inheritance (grandparent → parent → child)\n\n3. **What happens if a child model defines a field with the same name as the parent?**\n   - Answer: The child model's field definition overrides the parent's field\n\n4. **How do you use inherited models in actions?**\n   - Answer: Use `PUBLISH MODEL ChildModel` - it includes all parent fields plus child-specific fields\n\n---\n\n## 📝 Summary\n\n### Key Concepts Learned\n✅ **Model Inheritance** - `FROM` keyword for extending models  \n✅ **Base Models** - Common functionality in parent models  \n✅ **Specialized Models** - Domain-specific extensions  \n✅ **Model Hierarchies** - Multi-level inheritance structures  \n✅ **Polymorphic Usage** - One action handling multiple model types  \n✅ **Code Reuse** - Shared fields and consistent structures  \n\n### Inheritance Patterns\n- **Base + Specialized**: Common fields with type-specific additions\n- **Category Hierarchies**: Organizing related data types\n- **Progressive Specialization**: Multi-level inheritance for complex domains\n- **Polymorphic Processing**: Single actions handling multiple model types\n\n### Design Principles\n- **Common Fields Up**: Put shared fields in base models\n- **Specific Fields Down**: Add specialized fields in child models\n- **Logical Grouping**: Group related models in inheritance hierarchies\n- **Consistent Naming**: Use clear, descriptive model names\n\n### Next Steps\n- Practice creating model hierarchies for your domain\n- Experiment with multi-level inheritance\n- Try polymorphic actions that handle multiple model types\n- Move on to [MQTT Bridge](../04-routes/mqtt-bridge.lotnb) to learn system integration\n\n---\n\n## 🚀 Further Exploration\n\n### Advanced Inheritance Patterns\n- Abstract base models with required fields\n- Mixin-style models for cross-cutting concerns\n- Dynamic model selection based on runtime conditions\n- Model versioning and evolution strategies\n\n### Enterprise Patterns\n- Domain-driven model design\n- Event sourcing with inherited event models\n- CQRS patterns with command and query models\n- Microservice data contracts using model inheritance\n\n### Performance Considerations\n- Inheritance depth impact on processing\n- Field optimization in base models\n- Memory usage with large model hierarchies\n\n---\n\n**Ready to connect systems? Continue with [🌉 MQTT Bridge](../04-routes/mqtt-bridge.lotnb)!**\n\n[⬅️ Previous: Action Models](./action-models.lotnb) | [🏠 Back to Index](../index.lotnb) | [➡️ Next: MQTT Bridge](../04-routes/mqtt-bridge.lotnb)"
+  }
+]

@@ -1,0 +1,149 @@
+# LoT Training Repository - Git Ignore File
+
+# ==========================================
+# IDE and Editor Files
+# ==========================================
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================
+# Operating System Files
+# ==========================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ==========================================
+# Coreflux / LoT Specific
+# ==========================================
+
+# Broker credentials (keep .broker template, ignore actual credentials)
+# .broker contains connection string - may have passwords
+# Uncomment if your .broker contains sensitive credentials:
+# .broker
+
+# Python cache files (from CALL PYTHON scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# LoT runtime files
+*.lot.bak
+*.lotnb.bak
+
+# ==========================================
+# Docker
+# ==========================================
+
+# Docker compose override files (local customizations)
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Docker volumes (if mounted locally)
+volumes/
+
+# ==========================================
+# Logs and Temporary Files
+# ==========================================
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+temp/
+
+# ==========================================
+# Dependencies and Build Artifacts
+# ==========================================
+
+# Node.js (if using any JS tooling)
+node_modules/
+npm-debug.log*
+
+# Python virtual environments
+venv/
+env/
+.env/
+.venv/
+
+# ==========================================
+# Security - Sensitive Files
+# ==========================================
+
+# Certificate files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+certs/
+
+# Environment files with secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# Config files that may contain passwords
+config.local.json
+secrets.json
+credentials.json
+
+# ==========================================
+# Database Files
+# ==========================================
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# ==========================================
+# Backup Files
+# ==========================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# ==========================================
+# Archives
+# ==========================================
+
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z

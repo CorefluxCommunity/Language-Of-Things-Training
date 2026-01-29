@@ -1,0 +1,132 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# Environment Verification\r\n\r\n[🏠 Back to Index](../index.lotnb) | [➡️ Next: Timed Actions](../01-basics/timed-actions.lotnb)\r\n\r\n---\r\n\r\n<details>\r\n<summary><strong>Navigation Menu</strong></summary>\r\n\r\n| Section | Tutorials |\r\n|---------|----------|\r\n| **Setup** | [Environment Setup](./verify-environment.lotnb) |\r\n| **Basics** | [Timed Actions](../01-basics/timed-actions.lotnb) \\| [Topic Actions](../01-basics/topic-actions.lotnb) |\r\n| **Logic** | [Conditional Logic](../02-logic/conditional-logic.lotnb) |\r\n| **Models** | [Basic Models](../03-models/basic-models.lotnb) \\| [Action Models](../03-models/action-models.lotnb) \\| [Inheritance](../03-models/model-inheritance.lotnb) |\r\n| **Routes** | [MQTT Bridge](../04-routes/mqtt-bridge.lotnb) \\| [Database](../04-routes/database-routes.lotnb) |\r\n| **Python** | [Simple](../05-python/simple-python.lotnb) \\| [Advanced](../05-python/advanced-python.lotnb) |\r\n\r\n</details>\r\n\r\n---\r\n\r\n## Purpose\r\n\r\nThis notebook verifies that your LoT training environment is properly configured. Run through each section to ensure all services are accessible before starting the tutorials.\r\n\r\n---\r\n\r\n> **CAUTION - Free Tier Resource Limits**\r\n>\r\n> The free version of Coreflux has resource limits:\r\n> - **Routes**: 2 maximum\r\n> - **Actions**: 12 maximum\r\n> - **Models**: 40 maximum\r\n>\r\n> Delete unused resources before creating new ones during exercises.\r\n\r\n---\r\n\r\n## Prerequisites Checklist\r\n\r\n### Docker Services\r\n\r\nBefore running verification, ensure Docker Compose services are running:\r\n"
+  },
+  {
+    "kind": 2,
+    "language": "shellscript",
+    "value": "cd setup\ndocker-compose up -d\ndocker-compose ps\n\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "\r\nExpected services:\r\n- `coreflux_broker` - Primary MQTT broker (port 1883)\r\n- `lot_postgres` - PostgreSQL database (port 5432)\r\n- `opcua_factory_simulator` - OPC UA simulator (port 4840)\r\n- `mosquitto_bridge` - Secondary MQTT broker (port 1884)\r\n- `lot_adminer` - Database UI (port 8080)\r\n\r\n---\r\n\r\n## Service Connection Details\r\n\r\n| Service | Host | Port | Credentials |\r\n|---------|------|------|-------------|\r\n| Coreflux MQTT | localhost | 1883 | admin / coreflux |\r\n| PostgreSQL | localhost | 5432 | lot_user / lot_training_pass |\r\n| OPC UA Simulator | localhost | 4840 | (no auth) |\r\n| Mosquitto MQTT | localhost | 1884 | (no auth) |\r\n| Adminer UI | localhost | 8080 | (web interface) |\r\n| Coreflux Public | iot.coreflux.cloud | 1883 | (no auth) |\r\n\r\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Test 1: Local Broker Connection\n\nThis action publishes a test message to verify the local MQTT broker is accessible."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION VerifyLocalBroker\r\nON TOPIC \"test/verify/trigger\" DO\r\n    SET \"test_time\" WITH TIMESTAMP \"UTC\"\r\n    PUBLISH TOPIC \"test/verify/result\" WITH \"Local broker OK - \" + {test_time}\r\n    PUBLISH TOPIC \"test/verify/status\" WITH \"PASS\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**How to test:**\n1. Execute the action above\n2. Publish any message to `test/verify/trigger`\n3. Check for response on `test/verify/result`\n\n**Expected Result:**\n- Message appears on `test/verify/result` with timestamp\n- Status `PASS` on `test/verify/status`\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Test 2: Heartbeat Action\n\nThis timed action confirms the LoT runtime is processing actions correctly."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION VerifyHeartbeat\r\nON EVERY 5 SECONDS DO\r\n    SET \"beat_count\" WITH (GET TOPIC \"test/heartbeat/count\" AS INT)\r\n    SET \"new_count\" WITH ({beat_count} + 1)\r\n    PUBLISH TOPIC \"test/heartbeat/count\" WITH {new_count}\r\n    PUBLISH TOPIC \"test/heartbeat/pulse\" WITH \"Heartbeat #\" + {new_count} + \" at \" + TIMESTAMP \"UTC\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**How to test:**\n1. Execute the action above\n2. Subscribe to `test/heartbeat/#`\n3. Wait 10-15 seconds\n\n**Expected Result:**\n- Counter increments every 5 seconds\n- Pulse messages appear with timestamps\n\n**Cleanup:** Delete this action after verification to stay within limits.\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Test 3: Model Definition\n\nThis model verifies the model system is working correctly."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL VerificationStatus\r\n    ADD \"test_name\" AS STRING FROM TOPIC \"test/model/name\" AS TRIGGER\r\n    ADD \"status\" AS STRING FROM TOPIC \"test/model/status\"\r\n    ADD \"timestamp\" AS STRING FROM TOPIC \"test/model/time\"\r\n    ADD \"verified\" AS BOOL FROM TOPIC \"test/model/verified\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**How to test:**\n1. Execute the model above\n2. Publish test data:\n   - `test/model/status` = \"READY\"\n   - `test/model/time` = \"2025-01-28T10:00:00Z\"\n   - `test/model/verified` = `true`\n   - `test/model/name` = \"Environment Check\" (triggers output)\n3. Check `test/model/result` for JSON output\n\n**Expected Result:**\n```json\n{\n  \"test_name\": \"Environment Check\",\n  \"status\": \"READY\",\n  \"timestamp\": \"2025-01-28T10:00:00Z\",\n  \"verified\": true\n}\n```\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Test 4: Database Connectivity\n\nThis route verifies PostgreSQL database connectivity.\n\n> **Note:** This uses 1 of your 2 available routes. Delete after testing."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE VerifyDatabase WITH TYPE POSTGRESQL\r\n    ADD SQL_CONFIG\r\n        WITH SERVER \"lot_postgres\"\r\n        WITH PORT 5432\r\n        WITH DATABASE \"lot_training\"\r\n        WITH USERNAME \"lot_user\"\r\n        WITH PASSWORD \"lot_training_pass\"\r\n        WITH USE_SSL FALSE\r\n    ADD EVENT TestConnection\r\n        WITH QUERY \"SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = 'public'\"\r\n        WITH SOURCE_TOPIC \"test/db/ping\"\r\n        WITH DESTINATION_TOPIC \"test/db/result\"\r\n    ADD EVENT GetSampleData\r\n        WITH QUERY \"SELECT * FROM production_records LIMIT 3\"\r\n        WITH SOURCE_TOPIC \"test/db/sample\"\r\n        WITH DESTINATION_TOPIC \"test/db/sample/result\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**How to test:**\n1. Execute the route above\n2. Publish any message to `test/db/ping`\n3. Check `test/db/result` for response\n\n**Expected Result:**\n- Response showing table count (should be 6 tables)\n- Query for sample data returns production records\n\n**Alternative: Use Adminer UI**\n- Open http://localhost:8080\n- System: PostgreSQL\n- Server: postgres (or lot_postgres)\n- Username: lot_user\n- Password: lot_training_pass\n- Database: lot_training\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Test 5: MQTT Bridge (Secondary Broker)\n\nThis route tests connectivity to the secondary Mosquitto broker.\n\n> **Note:** This uses 1 of your 2 available routes. Delete after testing."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE VerifyBridge WITH TYPE MQTT_BRIDGE\r\n    ADD SOURCE_CONFIG\r\n        WITH BROKER_ADDRESS \"coreflux_broker\"\r\n        WITH BROKER_PORT '1883'\r\n        WITH CLIENT_ID \"VerifySource\"\r\n    ADD DESTINATION_CONFIG\r\n        WITH BROKER_ADDRESS \"mosquitto_bridge\"\r\n        WITH BROKER_PORT '1883'\r\n        WITH CLIENT_ID \"VerifyDest\"\r\n    ADD MAPPING test_bridge\r\n        WITH SOURCE_TOPIC \"test/bridge/out\"\r\n        WITH DESTINATION_TOPIC \"test/bridge/received\"\r\n        WITH DIRECTION \"out\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**How to test:**\n1. Execute the route above\n2. Publish a message to `test/bridge/out` on the Coreflux broker\n3. Subscribe to `test/bridge/received` on Mosquitto (port 1884)\n4. Verify the message was forwarded\n\n**Using mosquitto_sub to verify:**\n```bash\nmosquitto_sub -h localhost -p 1884 -t \"test/bridge/#\" -v\n```\n\n**Expected Result:**\n- Messages published to Coreflux appear on Mosquitto\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Test 6: REST API Connectivity\n\nThis action tests connectivity to external REST APIs used in exercises."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION VerifyRESTAPI\r\nON TOPIC \"test/api/check\" DO\r\n    // This action confirms the LoT action system is ready\r\n    // Actual REST API calls are made via ROUTE definitions\r\n    PUBLISH TOPIC \"test/api/ready\" WITH \"REST API action ready\"\r\n    PUBLISH TOPIC \"test/api/endpoints\" WITH \"JSONPlaceholder: https://jsonplaceholder.typicode.com | ReqRes: https://reqres.in/api\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**External APIs for exercises:**\n\n| API | Base URL | Purpose |\n|-----|----------|--------|\n| JSONPlaceholder | https://jsonplaceholder.typicode.com | GET/POST testing |\n| ReqRes | https://reqres.in/api | User management |\n\n**Manual verification:**\n```bash\ncurl https://jsonplaceholder.typicode.com/todos/1\ncurl https://reqres.in/api/users/1\n```\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Test 7: Public Broker Connectivity\n\nTest connection to the Coreflux public cloud broker.\n\n> **WARNING:** All messages on the public broker are visible to everyone!"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION VerifyPublicBroker\r\nON TOPIC \"test/public/trigger\" DO\r\n    SET \"unique_id\" WITH RANDOM UUID\r\n    PUBLISH TOPIC \"test/public/info\" WITH \"Public broker: iot.coreflux.cloud:1883\"\r\n    PUBLISH TOPIC \"test/public/note\" WITH \"Test ID: \" + {unique_id} + \" - All messages on public broker are visible to everyone!\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Public Broker Details:**\n- Host: `iot.coreflux.cloud`\n- MQTT: Port 1883\n- MQTT TLS: Port 8883\n- WebSocket: Port 5000\n- WebSocket TLS: Port 443\n\n**Manual verification:**\n```bash\nmosquitto_sub -h iot.coreflux.cloud -p 1883 -t \"test/#\" -v\n```\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Cleanup\n\nAfter verification, delete test resources to stay within free tier limits.\n\n### Actions to Delete:\n- VerifyLocalBroker\n- VerifyHeartbeat\n- VerifyRESTAPI\n- VerifyPublicBroker\n\n### Models to Delete:\n- VerificationStatus\n\n### Routes to Delete:\n- VerifyDatabase\n- VerifyBridge\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Verification Summary\n\n| Test | Service | Expected Result |\n|------|---------|----------------|\n| 1 | Local Broker | Message echo on trigger |\n| 2 | Heartbeat | Counter increments |\n| 3 | Model | JSON output on trigger |\n| 4 | Database | Table count response |\n| 5 | Bridge | Message forwarded to Mosquitto |\n| 6 | REST API | Endpoints documented |\n| 7 | Public | Connection info displayed |\n\n---\n\n## Troubleshooting\n\n### Docker Services Not Running\n```bash\ncd setup\ndocker-compose up -d\ndocker-compose logs coreflux\n```\n\n### Database Connection Failed\n- Check PostgreSQL is running: `docker-compose ps lot_postgres`\n- Verify credentials in `.env` file\n- Access Adminer at http://localhost:8080\n\n### Bridge Not Working\n- Ensure Mosquitto is running: `docker-compose ps mosquitto_bridge`\n- Check broker addresses match container names within Docker network\n\n### Actions Not Executing\n- Verify LoT runtime is connected to broker\n- Check VS Code LoT Notebooks extension status\n- Ensure broker credentials are correct\n\n---\n\n## Next Steps\n\nOnce all tests pass, you're ready to begin the training!\n\n**Start here:** [Timed Actions](../01-basics/timed-actions.lotnb)"
+  }
+]

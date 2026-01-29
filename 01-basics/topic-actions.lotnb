@@ -1,0 +1,97 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# Topic Actions - Event-Driven Programming\r\n\r\n[⬅️ Previous: Timed Actions](./timed-actions.lotnb) | [🏠 Back to Index](../index.lotnb) | [➡️ Next: Conditional Logic](../02-logic/conditional-logic.lotnb)\r\n\r\n---\r\n\r\n<details>\r\n<summary><strong>Navigation Menu</strong></summary>\r\n\r\n| Section | Tutorials |\r\n|---------|----------|\r\n| **Setup** | [Environment Setup](../00-setup/verify-environment.lotnb) |\r\n| **Basics** | [Timed Actions](./timed-actions.lotnb) \\| [Topic Actions](./topic-actions.lotnb) |\r\n| **Logic** | [Conditional Logic](../02-logic/conditional-logic.lotnb) |\r\n| **Models** | [Basic Models](../03-models/basic-models.lotnb) \\| [Action Models](../03-models/action-models.lotnb) \\| [Inheritance](../03-models/model-inheritance.lotnb) |\r\n| **Routes** | [MQTT Bridge](../04-routes/mqtt-bridge.lotnb) \\| [Database](../04-routes/database-routes.lotnb) |\r\n| **Python** | [Simple](../05-python/simple-python.lotnb) \\| [Advanced](../05-python/advanced-python.lotnb) |\r\n\r\n</details>\r\n\r\n---\r\n\r\n> **CAUTION - Free Tier Resource Limits**\r\n>\r\n> The free version of Coreflux has resource limits:\r\n> - **Routes**: 2 maximum\r\n> - **Actions**: 12 maximum\r\n> - **Models**: 40 maximum\r\n>\r\n> Delete unused resources before creating new ones during exercises.\r\n\r\n---\r\n\r\n## Learning Objectives\r\n\r\nIn this tutorial, you will learn:\r\n- How to create actions triggered by MQTT topics\r\n- The `ON TOPIC` syntax and topic patterns\r\n- Working with wildcards (`+`) for flexible topic matching\r\n- Processing payloads and routing data\r\n- Topic position extraction for context-aware processing\r\n\r\n---\r\n\r\n## 📖 Introduction\r\n\r\n**Topic Actions** are the core of event-driven LoT programming. They respond instantly to MQTT messages, enabling:\r\n- Real-time data processing\r\n- Event-driven automation\r\n- Message routing and transformation\r\n- Context-aware responses\r\n\r\n### Real-World Applications\r\n- **Sensor Data Processing**: React to temperature readings instantly\r\n- **Alarm Handling**: Process equipment alarms as they occur\r\n- **Data Routing**: Forward messages between different systems\r\n- **Command Processing**: Execute device commands in real-time\r\n\r\n---\r\n\r\n## 🧠 Core Concepts\r\n\r\n### The `ON TOPIC` Syntax\r\n\r\nTopic actions respond to MQTT messages:\r\n```lot\r\nON TOPIC \"exact/topic/name\" DO\r\n    // Action logic here\r\n```\r\n\r\n### Topic Wildcards\r\n\r\nUse `+` for flexible topic matching:\r\n- `\"sensors/+/temperature\"` - Matches any sensor ID\r\n- `\"factory/+/+/status\"` - Matches any line and machine\r\n- `\"+/+/+/alarm\"` - Matches any 3-level hierarchy ending in alarm\r\n\r\n### Payload Access\r\n\r\n- `PAYLOAD` - The message content\r\n- Can be text, numbers, or JSON data\r\n\r\n### Topic Position Extraction\r\n\r\n- `TOPIC POSITION 1` - First part of topic\r\n- `TOPIC POSITION 2` - Second part of topic\r\n- Useful for extracting context from wildcard matches\r\n\r\n---\r\n\r\n## 🛠️ Hands-On Examples\r\n\r\n### Example 1: Simple Echo Action\r\n\r\nLet's start with a basic action that echoes messages:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION SimpleEcho\r\nON TOPIC \"input/message\" DO\r\n    PUBLISH TOPIC \"output/message\" WITH PAYLOAD +1"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Listens for messages on `input/message`\n- Republishes the same payload to `output/message`\n- Creates a simple message relay\n\n**Test it:**\n```\nPublish to: input/message\nPayload: \"Hello LoT!\"\nResult: output/message receives \"Hello LoT!\"\n```\n\n---\n\n### Example 2: Sensor Data Router\n\nNow let's route sensor data using wildcards:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION SensorDataRouter\r\nON TOPIC \"client/+/temperature\" DO\r\n    // Extract sensor ID from topic\r\n    SET \"sensor_id\" WITH TOPIC POSITION 2\r\n    \r\n    // Route to processed data topic\r\n    PUBLISH TOPIC \"processed/temperature/\" + {sensor_id} WITH PAYLOAD\r\n    // Add timestamp for tracking\r\n    PUBLISH TOPIC \"processed/temperature/\" + {sensor_id} + \"/timestamp\" WITH TIMESTAMP \"UTC\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\r\n- Matches any topic like `sensors/SENSOR_ID/temperature`\r\n- Extracts the sensor ID using `TOPIC POSITION 2`\r\n- Routes data to a processed topic structure\r\n- Adds timestamps for data tracking\r\n\r\n**Test it:**\r\n```\r\nPublish to: sensors/temp001/temperature\r\nPayload: 25.5\r\nResults:\r\n  processed/temperature/temp001: 25.5\r\n  processed/temperature/temp001/timestamp: \"2025-10-25T14:30:15Z\"\r\n```\r\n\r\n---\r\n\r\n### Example 3: Multi-Level Wildcard Processing\r\n\r\nLet's handle complex topic hierarchies:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION FactoryAlarmProcessor\r\nON TOPIC \"factory/+/+/alarm\" DO\r\n    // Extract context from topic positions\r\n    SET \"line_id\" WITH TOPIC POSITION 2\r\n    SET \"machine_id\" WITH TOPIC POSITION 3\r\n    \r\n    // Create alarm context\r\n    SET \"alarm_context\" WITH \"Line \" + {line_id} + \" Machine \" + {machine_id}\r\n    \r\n    // Route to centralized alarm system\r\n    PUBLISH TOPIC \"alarms/factory/\" + {line_id} + \"/\" + {machine_id} WITH PAYLOAD\r\n    PUBLISH TOPIC \"alarms/factory/\" + {line_id} + \"/\" + {machine_id} + \"/context\" WITH {alarm_context}\r\n    PUBLISH TOPIC \"alarms/factory/\" + {line_id} + \"/\" + {machine_id} + \"/timestamp\" WITH TIMESTAMP \"UNIX\"\r\n    \r\n    // Send to global alarm dashboard\r\n    PUBLISH TOPIC \"dashboard/alarms/latest\" WITH {alarm_context} + \": \" + PAYLOAD"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\r\n- Matches topics like `factory/line1/machine5/alarm`\r\n- Extracts line and machine IDs from topic structure\r\n- Creates contextual alarm messages\r\n- Routes to both specific and global alarm topics\r\n- Demonstrates hierarchical data processing\r\n\r\n**Test it:**\r\n```\r\nPublish to: factory/line1/machine5/alarm\r\nPayload: \"Overheating detected\"\r\nResults:\r\n  alarms/factory/line1/machine5: \"Overheating detected\"\r\n  alarms/factory/line1/machine5/context: \"Line line1 Machine machine5\"\r\n  dashboard/alarms/latest: \"Line line1 Machine machine5: Overheating detected\"\r\n```\r\n\r\n---\r\n\r\n### Example 4: Data Transformation\r\n\r\nLet's transform incoming data before routing:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION TemperatureConverter\r\nON TOPIC \"sensors/+/temperature/celsius\" DO\r\n    // Extract sensor ID\r\n    SET \"sensor_id\" WITH TOPIC POSITION 2\r\n    \r\n    // Convert Celsius to Fahrenheit\r\n    SET \"fahrenheit\" WITH (PAYLOAD * 9 / 5 + 32)\r\n    \r\n    // Publish both values\r\n    PUBLISH TOPIC \"sensors/\" + {sensor_id} + \"/temperature/fahrenheit\" WITH {fahrenheit}\r\n    PUBLISH TOPIC \"sensors/\" + {sensor_id} + \"/temperature/both\" WITH \"C: \" + PAYLOAD + \", F: \" + {fahrenheit}\r\n    \r\n    // Add conversion timestamp\r\n    PUBLISH TOPIC \"sensors/\" + {sensor_id} + \"/temperature/converted_at\" WITH TIMESTAMP \"UTC\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Listens for Celsius temperature readings\n- Performs mathematical conversion to Fahrenheit\n- Publishes both converted value and combined format\n- Adds processing timestamp\n- Demonstrates real-time data transformation\n\n**Test it:**\n```\nPublish to: sensors/temp001/temperature/celsius\nPayload: 25\nResults:\n  sensors/temp001/temperature/fahrenheit: 77\n  sensors/temp001/temperature/both: \"C: 25, F: 77\"\n  sensors/temp001/temperature/converted_at: \"2025-10-25T14:30:15Z\"\n```\n\n---\n\n### Example 5: Command Processor\n\nLet's create a command processing system:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION DeviceCommandProcessor\r\nON TOPIC \"commands/+/execute\" DO\r\n    // Extract device ID\r\n    SET \"device_id\" WITH TOPIC POSITION 2\r\n    \r\n    // Log command execution\r\n    PUBLISH TOPIC \"logs/commands/\" + {device_id} WITH \"Executing: \" + PAYLOAD + \" at \" + TIMESTAMP \"UTC\"\r\n    PUBLISH TOPIC \"devices/\" + {device_id} + \"/previous_command\" WITH (GET TOPIC \"devices/\" + {device_id} + \"/command\")\r\n    // Route command to device\r\n    PUBLISH TOPIC \"devices/\" + {device_id} + \"/command\" WITH PAYLOAD\r\n    \r\n    // Update device status\r\n    PUBLISH TOPIC \"devices/\" + {device_id} + \"/last_command\" WITH PAYLOAD\r\n    PUBLISH TOPIC \"devices/\" + {device_id} + \"/last_command_time\" WITH TIMESTAMP \"UNIX\"\r\n    \r\n    // Acknowledge command\r\n    PUBLISH TOPIC \"commands/\" + {device_id} + \"/status\" WITH \"Command sent: \" + PAYLOAD"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\r\n- Processes commands for any device\r\n- Creates audit logs of command execution\r\n- Routes commands to specific devices\r\n- Tracks last command and execution time\r\n- Provides command acknowledgment\r\n- Demonstrates command/control patterns\r\n\r\n**Test it:**\r\n```\r\nPublish to: commands/pump001/execute\r\nPayload: \"START\"\r\nResults:\r\n  logs/commands/pump001: \"Executing: START at 2025-10-25T14:30:15Z\"\r\n  devices/pump001/command: \"START\"\r\n  devices/pump001/last_command: \"START\"\r\n  commands/pump001/status: \"Command sent: START\"\r\n```\r\n\r\n---\r\n\r\n## 🏋️ Exercises\r\n\r\n### Exercise 1: Simple Data Router\r\n**Task**: Create an action that listens to `raw/+/data` and routes messages to `processed/DATA_ID/value`.\r\n\r\n**Hint**: Use `TOPIC POSITION 1` to extract the DATA_ID.\r\n"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": ""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 2: Multi-Sensor Processor\r\n**Task**: Create an action that processes any sensor reading from `sensors/+/+/reading` and:\r\n- Extracts sensor type and sensor ID\r\n- Routes to `processed/SENSOR_TYPE/SENSOR_ID/value`\r\n- Adds timestamp\r\n\r\n**Hint**: Use `TOPIC POSITION 1` for sensor type and `TOPIC POSITION 2` for sensor ID."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 2: Write your solution here\r\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 3: Alarm Classifier\r\n**Task**: Create an action that processes alarms from `alarms/+/raw` and classifies them:\r\n- If payload contains \"temperature\": route to `alarms/temperature/DEVICE_ID`\r\n- If payload contains \"pressure\": route to `alarms/pressure/DEVICE_ID`\r\n- Otherwise: route to `alarms/general/DEVICE_ID`\r\n\r\n**Hint**: Use `IF...ELSE` with `PAYLOAD CONTAINS \"text\"` conditions."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 3: Write your solution here\r\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 4: Status Aggregator\r\n**Task**: Create an action that listens to `machines/+/status` and:\r\n- Counts how many machines are \"RUNNING\" vs \"STOPPED\"\r\n- Updates counters in `dashboard/machines/running_count` and `dashboard/machines/stopped_count`\r\n- Updates `dashboard/machines/last_update` with timestamp\r\n\r\n**Challenge**: Use `GET TOPIC` to maintain running counters."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 4: Write your solution here\r\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "\r\n\r\n---\r\n\r\n## 🎯 Checkpoint Questions\r\n\r\n1. **What does the `+` wildcard match in MQTT topics?**\r\n   - Answer: Exactly one topic level (between forward slashes)\r\n\r\n2. **How do you extract parts of a wildcard topic?**\r\n   - Answer: Use `TOPIC POSITION N` where N is the position (0-based)\r\n\r\n3. **What's the difference between `PAYLOAD` and `GET TOPIC`?**\r\n   - Answer: `PAYLOAD` is the incoming message data, `GET TOPIC` retrieves stored topic values\r\n\r\n4. **How do you check if a payload contains specific text?**\r\n   - Answer: Use `PAYLOAD CONTAINS \"text\"` in IF conditions\r\n\r\n---\r\n\r\n## 📝 Summary\r\n\r\n### Key Concepts Learned\r\n✅ **Topic Actions** - `ON TOPIC` for event-driven responses  \r\n✅ **Wildcard Matching** - `+` for flexible topic patterns  \r\n✅ **Topic Position Extraction** - Context from topic structure  \r\n✅ **Payload Processing** - Working with incoming message data  \r\n✅ **Data Routing** - Intelligent message forwarding  \r\n✅ **Context Awareness** - Using topic structure for smart processing  \r\n\r\n### Comparison: Timed vs Topic Actions\r\n\r\n| Aspect | Timed Actions | Topic Actions |\r\n|--------|---------------|---------------|\r\n| **Trigger** | Time intervals | MQTT messages |\r\n| **Frequency** | Regular/predictable | Event-driven/variable |\r\n| **Use Cases** | Monitoring, reporting | Processing, routing |\r\n| **Data Source** | Internal state | External messages |\r\n| **Response Time** | Scheduled | Immediate |\r\n\r\n### Next Steps\r\n- Practice the exercises above\r\n- Experiment with different topic patterns\r\n- Try combining topic and timed actions\r\n- Move on to [Conditional Logic](../02-logic/conditional-logic.lotnb) for advanced control flow\r\n\r\n---\r\n\r\n## 🚀 Further Exploration\r\n\r\n### Advanced Topic Patterns\r\n- Multi-level wildcards: `+/+/+/sensor`\r\n- Combining multiple topic triggers in one action\r\n- Topic pattern optimization for performance\r\n\r\n### Integration Patterns\r\n- Combine topic actions with timed actions\r\n- Create topic-based state machines\r\n- Build event-driven data pipelines\r\n\r\n### Real-World Projects\r\n- Build a complete sensor data processing system\r\n- Create device command and control interfaces\r\n- Implement real-time alarm management\r\n\r\n---\r\n\r\n**Ready to add intelligence to your actions? Continue with [🔀 Conditional Logic](../02-logic/conditional-logic.lotnb)!**\r\n\r\n[⬅️ Previous: Timed Actions](./timed-actions.lotnb) | [🏠 Back to Index](../index.lotnb) | [➡️ Next: Conditional Logic](../02-logic/conditional-logic.lotnb)"
+  }
+]

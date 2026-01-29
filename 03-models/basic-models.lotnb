@@ -1,0 +1,97 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# Basic Models - Structuring Your Data\n\n[⬅️ Previous: Conditional Logic](../02-logic/conditional-logic.lotnb) | [🏠 Back to Index](../index.lotnb) | [➡️ Next: Action Models](./action-models.lotnb)\n\n---\n\n<details>\n<summary><strong>Navigation Menu</strong></summary>\n\n| Section | Tutorials |\n|---------|----------|\n| **Setup** | [Environment Setup](../00-setup/verify-environment.lotnb) |\n| **Basics** | [Timed Actions](../01-basics/timed-actions.lotnb) \\| [Topic Actions](../01-basics/topic-actions.lotnb) |\n| **Logic** | [Conditional Logic](../02-logic/conditional-logic.lotnb) |\n| **Models** | [Basic Models](./basic-models.lotnb) \\| [Action Models](./action-models.lotnb) \\| [Inheritance](./model-inheritance.lotnb) |\n| **Routes** | [MQTT Bridge](../04-routes/mqtt-bridge.lotnb) \\| [Database](../04-routes/database-routes.lotnb) |\n| **Python** | [Simple](../05-python/simple-python.lotnb) \\| [Advanced](../05-python/advanced-python.lotnb) |\n\n</details>\n\n---\n\n> **CAUTION - Free Tier Resource Limits**\n>\n> The free version of Coreflux has resource limits:\n> - **Routes**: 2 maximum\n> - **Actions**: 12 maximum\n> - **Models**: 40 maximum\n>\n> Delete unused resources before creating new ones during exercises.\n\n---\n\n## Learning Objectives\n\nIn this tutorial, you will learn:\n- How to define data models in LoT\n- Different field types (STRING, INT, BOOL, FLOAT, OBJECT)\n- Associating models with MQTT topics\n- Using triggers to control when models publish\n- Creating structured, consistent data formats\n- Model validation and default values\n\n---\n\n## 📖 Introduction\n\n**Models** in LoT are like database schemas for MQTT data. They:\n- Define the structure of your data\n- Ensure consistency across your system\n- Provide automatic JSON formatting\n- Enable data validation and defaults\n- Create reusable data templates\n\n### Real-World Applications\n- **Sensor Data**: Standardize temperature, pressure, flow readings\n- **Equipment Status**: Consistent machine state reporting\n- **Production Records**: Structured manufacturing data\n- **Alarm Messages**: Standardized alert formats\n\n---\n\n## 🧠 Core Concepts\n\n### Model Definition Syntax\n\n```lot\nDEFINE MODEL ModelName WITH TOPIC \"topic/name\"\n    ADD FIELD_TYPE \"field_name\" WITH default_value\n    ADD FIELD_TYPE \"field_name\" WITH TOPIC \"source/topic\"\n```\n\n### Field Types\n\n- `STRING` - Text data\n- `INT` - Integer numbers\n- `DOUBLE` - Decimal numbers\n- `BOOL` - True/false values\n- `OBJECT` - JSON objects\n- `ARRAY` - JSON arrays\n\n### Data Sources\n\n- **Static values**: `WITH \"fixed_value\"`\n- **Topic data**: `WITH TOPIC \"source/topic\"`\n- **Timestamps**: `WITH TIMESTAMP \"UTC\"`\n- **Calculations**: `WITH (expression)`\n\n### Triggers\n\n- `AS TRIGGER` - Field that triggers model publication\n- Model publishes when trigger field changes\n\n---\n\n## 🛠️ Hands-On Examples\n\n### Example 1: Simple Sensor Model\n\nLet's create a basic sensor data model:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL SensorReading COLLAPSED WITH TOPIC \"sensors/formatted/temperature\"\r\n    ADD STRING \"sensor_id\" WITH \"TEMP001\"\r\n    ADD DOUBLE \"value\" WITH TOPIC \"sensors/raw/temperature\" AS TRIGGER\r\n    ADD STRING \"unit\" WITH \"celsius\"\r\n    ADD STRING \"timestamp\" WITH TIMESTAMP \"UNIX\"\r\n    ADD STRING \"status\" WITH \"ACTIVE\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Creates a structured temperature sensor reading\n- Triggers when raw temperature data arrives\n- Adds consistent metadata (sensor_id, unit, timestamp, status)\n- Publishes formatted JSON to `sensors/formatted/temperature`\n- Demonstrates basic model structure\n\n**Expected Output:**\n```json\n{\n  \"sensor_id\": \"TEMP001\",\n  \"value\": 25.5,\n  \"unit\": \"celsius\",\n  \"timestamp\": \"2025-10-25T14:30:15Z\",\n  \"status\": \"ACTIVE\"\n}\n```\n\n**How to Test:**\n1. Publish `23.5` to `sensors/raw/temperature`\n2. Model automatically publishes structured data to `sensors/formatted/temperature`\n\n---\n\n### Example 2: Equipment Status Model\n\nLet's create a model for equipment status reporting:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL EquipmentStatus WITH TOPIC \"equipment/status/formatted\"\r\n    ADD STRING \"equipment_id\" WITH TOPIC \"equipment/current/id\"\r\n    ADD STRING \"status\" WITH TOPIC \"equipment/current/status\" AS TRIGGER\r\n    ADD INT \"runtime_hours\" WITH TOPIC \"equipment/current/runtime\"\r\n    ADD DOUBLE \"efficiency\" WITH TOPIC \"equipment/current/efficiency\"\r\n    ADD BOOL \"maintenance_required\" WITH TOPIC \"equipment/current/maintenance_flag\"\r\n    ADD STRING \"last_update\" WITH TIMESTAMP \"UTC\"\r\n    ADD STRING \"location\" WITH \"Factory Floor A\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\r\n- Combines data from multiple topics into one structured message\r\n- Triggers when equipment status changes\r\n- Includes both dynamic data (from topics) and static data (location)\r\n- Creates comprehensive equipment status reports\r\n- Demonstrates multi-source model composition\r\n\r\n**Expected Output:**\r\n```json\r\n{\r\n  \"equipment_id\": \"PUMP001\",\r\n  \"status\": \"RUNNING\",\r\n  \"runtime_hours\": 1250,\r\n  \"efficiency\": 87.5,\r\n  \"maintenance_required\": false,\r\n  \"last_update\": \"2025-10-25T14:30:15Z\",\r\n  \"location\": \"Factory Floor A\"\r\n}\r\n```\r\n\r\n---\r\n\r\n### Example 3: Production Record Model 🟡 -> double is not ok\r\n\r\n\r\nLet's create a model for production tracking:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL ProductionRecord WITH TOPIC \"production/records/completed\"\r\n    ADD STRING \"batch_id\" WITH TOPIC \"production/current/batch_id\"\r\n    ADD STRING \"product_code\" WITH TOPIC \"production/current/product_code\"\r\n    ADD DOUBLE \"quantity_produced\" WITH TOPIC \"production/current/quantity\" AS TRIGGER\r\n    ADD DOUBLE \"quantity_target\" WITH TOPIC \"production/current/target\"\r\n    ADD DOUBLE \"efficiency_percent\" WITH ((quantity_produced *100) / (quantity_target*100))/100.0\r\n    ADD STRING \"operator\" WITH TOPIC \"production/current/operator\"\r\n    ADD STRING \"shift\" WITH TOPIC \"production/current/shift\"\r\n    ADD STRING \"start_time\" WITH TOPIC \"production/current/start_time\"\r\n    ADD STRING \"completion_time\" WITH TIMESTAMP \"UTC\"\r\n    ADD BOOL \"quality_passed\" WITH TOPIC \"production/current/quality_ok\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\r\n- Creates comprehensive production records\r\n- Calculates efficiency percentage automatically\r\n- Triggers when production quantity is updated\r\n- Combines operational data with timestamps\r\n- Includes quality control information\r\n- Demonstrates calculated fields in models\r\n\r\n**Expected Output:**\r\n```json\r\n{\r\n  \"batch_id\": \"BATCH_2025_001\",\r\n  \"product_code\": \"WIDGET_A\",\r\n  \"quantity_produced\": 95,\r\n  \"quantity_target\": 100,\r\n  \"efficiency_percent\": 95.0,\r\n  \"operator\": \"John Smith\",\r\n  \"shift\": \"Day Shift\",\r\n  \"start_time\": \"2025-10-25T08:00:00Z\",\r\n  \"completion_time\": \"2025-10-25T14:30:15Z\",\r\n  \"quality_passed\": true\r\n}\r\n```\r\n\r\n---\r\n\r\n### Example 4: Alarm Message Model 🟡  \"\" empty strings\r\n\r\nLet's create a standardized alarm model:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL AlarmMessage WITH TOPIC \"alarms/+/formatted\"\r\n    ADD STRING \"alarm_id\" WITH (RANDOM UUID)\r\n    ADD STRING \"source_equipment\" WITH (TOPIC POSITION 3)\r\n    ADD STRING \"alarm_type\" WITH TOPIC \"alarms/current/+/type\"\r\n    ADD STRING \"severity\" WITH TOPIC \"alarms/current/+/severity\" AS TRIGGER\r\n    ADD STRING \"message\" WITH TOPIC \"alarms/current/+/message\"\r\n    ADD BOOL \"acknowledged\" WITH FALSE\r\n    ADD STRING \"acknowledged_by\" WITH \"N/A\"\r\n    ADD BOOL \"resolved\" WITH FALSE\r\n    ADD STRING \"resolution_notes\" WITH \"N/A\"\r\n    ADD STRING \"timestamp\" WITH TIMESTAMP \"UTC\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\r\n- Creates standardized alarm messages with unique IDs\r\n- Includes all necessary alarm lifecycle fields\r\n- Triggers when alarm severity is set\r\n- Provides fields for acknowledgment and resolution tracking\r\n- Uses `RANDOM UUID` for unique alarm identification\r\n- Demonstrates comprehensive alarm data structure\r\n\r\n**Expected Output:**\r\n```json\r\n{\r\n  \"alarm_id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\r\n  \"source_equipment\": \"PUMP001\",\r\n  \"alarm_type\": \"TEMPERATURE\",\r\n  \"severity\": \"HIGH\",\r\n  \"message\": \"Temperature exceeded 80°C\",\r\n  \"timestamp\": \"2025-10-25T14:30:15Z\",\r\n  \"acknowledged\": \"false\",\r\n  \"acknowledged_by\": \"\",\r\n  \"resolved\": \"false\",\r\n  \"resolution_notes\": \"\"\r\n}\r\n```\r\n\r\n---\r\n\r\n### Example 5: Complex Sensor Model with Validation 🔴 Not implemented in version 1.8.2\r\n\r\nLet's create a model with multiple data types and validation:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL ComprehensiveSensorData WITH TOPIC \"sensors/comprehensive/+\"\r\n    ADD STRING \"sensor_id\" WITH TOPIC \"sensors/current/id\"\r\n    ADD STRING \"sensor_type\" WITH TOPIC \"sensors/current/type\"\r\n    ADD DOUBLE \"primary_value\" WITH TOPIC \"sensors/current/value\" AS TRIGGER\r\n    ADD STRING \"unit\" WITH TOPIC \"sensors/current/unit\"\r\n    ADD BOOL \"calibrated\" WITH TOPIC \"sensors/current/calibrated\"\r\n    ADD INT \"reading_count\" WITH (GET TOPIC \"sensors/current/reading_count\" + 1)\r\n    ADD STRING \"quality_status\" WITH IF (GET TOPIC \"sensors/current/value\" > 0 AND GET TOPIC \"sensors/current/calibrated\" EQUALS TRUE) THEN \"GOOD\" ELSE \"POOR\"\r\n    ADD OBJECT \"metadata\"\r\n        ADD STRING \"location\" WITH TOPIC \"sensors/current/location\",\r\n        ADD STRING \"installation_date\" WITH TOPIC \"sensors/current/install_date\",\r\n        ADD STRING \"last_calibration\" WITH TOPIC \"sensors/current/last_cal\"\r\n    ADD STRING \"timestamp\" WITH TIMESTAMP \"UTC\"\r\n    ADD DOUBLE \"value_fahrenheit\" WITH IF (GET TOPIC \"sensors/current/unit\" AS STRING EQUALS \"celsius\") THEN (GET TOPIC \"sensors/current/value\" AS DOUBLE * 9 / 5 + 32) ELSE NULL"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Combines multiple data types in one model\n- Implements conditional field values based on other fields\n- Maintains reading counters automatically\n- Includes nested object for metadata\n- Performs unit conversion conditionally\n- Demonstrates advanced model capabilities\n\n**Key Features:**\n- **Automatic Counting**: `reading_count` increments each time\n- **Conditional Values**: `quality_status` based on value and calibration\n- **Nested Objects**: `metadata` contains sub-fields\n- **Conditional Calculations**: Fahrenheit conversion only for Celsius sensors\n\n---\n\n## 🏋️ Exercises\n\n### Exercise 1: Simple Device Model\n**Task**: Create a model called `DeviceInfo` that publishes to `devices/info/+` with:\n- `device_name` (from topic `devices/current/name`)\n- `device_type` (static value \"SENSOR\")\n- `online_status` (from topic `devices/current/online`) - use as trigger\n- `last_seen` (current timestamp)"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 1: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 2: Production Summary Model\n**Task**: Create a model called `ProductionSummary` that publishes to `production/summary/daily` with:\n- `date` (current timestamp)\n- `total_produced` (from topic `production/daily/total`) - use as trigger\n- `target_production` (static value 1000)\n- `efficiency` (calculated: total_produced / target_production * 100)\n- `shift` (from topic `production/daily/shift`)"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 2: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 3: Quality Report Model\n**Task**: Create a model called `QualityReport` with:\n- `passed_count` (from topic `quality/passed`)\n- `failed_count` (from topic `quality/failed`) - use as trigger\n- `total_tested` (calculated: passed_count + failed_count)\n- `pass_rate` (calculated: passed_count / total_tested * 100)\n- `report_time` (current timestamp)\n- `inspector` (from topic `quality/inspector`)"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 3: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 4: Comprehensive Machine Model\n**Task**: Create a model called `MachineStatus` that includes:\n- Basic info: `machine_id`, `machine_type`, `location`\n- Operational data: `status`, `runtime_hours`, `cycle_count`\n- Performance: `efficiency`, `oee_score`\n- Maintenance: `maintenance_due`, `last_service_date`\n- Timestamp and reading counter\n\n**Challenge**: Include conditional logic for maintenance_due based on runtime_hours."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 4: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "\n\n---\n\n## 🎯 Checkpoint Questions\n\n1. **What's the purpose of the `AS TRIGGER` keyword?**\n   - Answer: It specifies which field change causes the model to publish its data\n\n2. **How do you include calculated fields in a model?**\n   - Answer: Use expressions with `WITH (calculation)` or conditional logic\n\n3. **What's the difference between static values and topic-sourced values?**\n   - Answer: Static values are fixed (`WITH \"value\"`), topic-sourced values come from MQTT topics (`WITH TOPIC \"topic/name\"`)\n\n4. **How do you create nested objects in models?**\n   - Answer: Use `OBJECT` type with `{}` syntax containing sub-fields\n\n---\n\n## 📝 Summary\n\n### Key Concepts Learned\n✅ **Model Definition** - `DEFINE MODEL` syntax and structure  \n✅ **Field Types** - STRING, INT, DOUBLE, BOOL, OBJECT, ARRAY  \n✅ **Data Sources** - Static values, topics, timestamps, calculations  \n✅ **Triggers** - `AS TRIGGER` for controlling publication  \n✅ **Structured Data** - Consistent JSON output formats  \n✅ **Validation** - Default values and conditional logic  \n\n### Model Design Principles\n- **Consistency**: Use standard field names across similar models\n- **Completeness**: Include all necessary context and metadata\n- **Efficiency**: Only include fields that add value\n- **Flexibility**: Use conditional logic for dynamic behavior\n\n### Next Steps\n- Practice creating models for different data types\n- Experiment with calculated fields and conditional values\n- Try nested objects and complex structures\n- Move on to [Action Models](./action-models.lotnb) to learn dynamic model publishing\n\n---\n\n## 🚀 Further Exploration\n\n### Advanced Model Features\n- Model inheritance and extension\n- Complex validation logic\n- Dynamic field generation\n- Performance optimization techniques\n\n### Integration Patterns\n- Models as API response formats\n- Database schema mapping\n- Data transformation pipelines\n- Real-time analytics structures\n\n### Real-World Projects\n- Design complete sensor data schemas\n- Create production tracking models\n- Build alarm and event management structures\n\n---\n\n**Ready to make models dynamic? Continue with [⚡ Action Models](./action-models.lotnb)!**\n\n[⬅️ Previous: Conditional Logic](../02-logic/conditional-logic.lotnb) | [🏠 Back to Index](../index.lotnb) | [➡️ Next: Action Models](./action-models.lotnb)"
+  }
+]

@@ -1,0 +1,127 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# Action Models - Dynamic Data Publishing\n\n[⬅️ Previous: Basic Models](./basic-models.lotnb) | [🏠 Back to Index](../index.lotnb) | [➡️ Next: Model Inheritance](./model-inheritance.lotnb)\n\n---\n\n<details>\n<summary><strong>Navigation Menu</strong></summary>\n\n| Section | Tutorials |\n|---------|----------|\n| **Setup** | [Environment Setup](../00-setup/verify-environment.lotnb) |\n| **Basics** | [Timed Actions](../01-basics/timed-actions.lotnb) \\| [Topic Actions](../01-basics/topic-actions.lotnb) |\n| **Logic** | [Conditional Logic](../02-logic/conditional-logic.lotnb) |\n| **Models** | [Basic Models](./basic-models.lotnb) \\| [Action Models](./action-models.lotnb) \\| [Inheritance](./model-inheritance.lotnb) |\n| **Routes** | [MQTT Bridge](../04-routes/mqtt-bridge.lotnb) \\| [Database](../04-routes/database-routes.lotnb) |\n| **Python** | [Simple](../05-python/simple-python.lotnb) \\| [Advanced](../05-python/advanced-python.lotnb) |\n\n</details>\n\n---\n\n> **CAUTION - Free Tier Resource Limits**\n>\n> The free version of Coreflux has resource limits:\n> - **Routes**: 2 maximum\n> - **Actions**: 12 maximum\n> - **Models**: 40 maximum\n>\n> Delete unused resources before creating new ones during exercises.\n\n---\n\n## Learning Objectives\n\nIn this tutorial, you will learn:\n- How to publish models from within actions\n- The `PUBLISH MODEL` syntax\n- Dynamic model field population\n- Using GET JSON to extract data from payloads\n- Creating event-driven structured data\n- Combining actions and models for powerful data processing\n\n---\n\n## 📖 Introduction\n\n**Action Models** combine the power of event-driven actions with structured data models. This approach enables:\n- Dynamic data creation based on events\n- Structured responses to real-time conditions\n- JSON data extraction and processing\n- Consistent data formats across different triggers\n- Event-driven database-like records\n\n### Real-World Applications\n- **Event Logging**: Create structured log entries when events occur\n- **Alarm Generation**: Generate standardized alarms from various triggers\n- **Report Creation**: Build reports when specific conditions are met\n- **Data Transformation**: Convert raw JSON data into structured formats\n\n---\n\n## 🧠 Core Concepts\n\n### PUBLISH MODEL Syntax\n\n```lot\nPUBLISH MODEL ModelName TO \"topic/destination\" WITH\n    field_name = value\n    another_field = another_value\n```\n\n### JSON Data Extraction\n\n- **GET JSON**: `GET JSON \"field\" IN PAYLOAD AS TYPE`\n- **Type Casting**: `AS STRING`, `AS DOUBLE`, `AS INT`, `AS BOOL`\n- **Nested Fields**: `GET JSON \"parent.child\" IN PAYLOAD AS STRING`\n\n### Dynamic Field Population\n\n- Use action variables: `field_name = {variable}`\n- Use payload data: `field_name = PAYLOAD`\n- Use JSON extraction: `field_name = GET JSON \"field\" IN PAYLOAD AS TYPE`\n- Use topic data: `field_name = GET TOPIC \"topic/name\" AS TYPE`\n- Use calculations: `field_name = (expression)`\n\n---\n\n## 🛠️ Hands-On Examples\n\n### Example 1: JSON Data Processing Model\n\nFirst, let's define a model and action that processes JSON data:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL SensorDataRecord COLLAPSED\r\n    ADD STRING \"unique_id_measure\" WITH (RANDOM UUID)\r\n    ADD STRING \"sensor_id\"\r\n    ADD STRING \"sensor_type\"\r\n    ADD DOUBLE \"temperature\"\r\n    ADD DOUBLE \"pressure\"\r\n    ADD STRING \"timestamp\"\r\n    ADD STRING \"quality_status\"\r\n    ADD STRING \"location\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION ProcessSensorJSON\r\nON TOPIC \"sensors/+/json_data\" DO\r\n    SET \"sensor_id\" WITH TOPIC POSITION 2\r\n    // Extract data from JSON payload using GET JSON\r\n    SET \"temperature_val\" WITH  \"33\"\r\n    SET \"pressure_val\" WITH \"1013\"\r\n    SET \"sensor_type\" WITH \"teste\"\r\n    SET \"quality\" WITH  \"good\"\r\n    SET \"location\" WITH \"loca1\"\r\n    \r\n    // Publish structured sensor record\r\n    PUBLISH MODEL SensorDataRecord TO \"sensors/processed/\" + {sensor_id} WITH\r\n        sensor_id = {sensor_id}\r\n        sensor_type = {sensor_type}\r\n        temperature = {temperature_val}\r\n        pressure = {pressure_val}\r\n        timestamp = TIMESTAMP \"UTC\"\r\n        quality_status = {quality}\r\n        location = {location}"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\r\n- Processes JSON sensor data using `GET JSON` extraction\r\n- Uses proper type casting (`AS DOUBLE`, `AS STRING`)\r\n- Extracts multiple fields from complex JSON payloads\r\n- Creates structured sensor records with extracted data\r\n- Demonstrates JSON data processing in LoT\r\n\r\n**Test it:**\r\n```\r\nPublish to: sensors/temp001/json_data\r\nPayload: {\r\n  \"temperature\": 75.5,\r\n  \"pressure\": 101.3,\r\n  \"type\": \"environmental\",\r\n  \"quality_status\": \"GOOD\",\r\n  \"location\": \"Factory Floor A\"\r\n}\r\nResult in sensors/processed/temp001:\r\n{\r\n  \"sensor_id\": \"temp001\",\r\n  \"sensor_type\": \"environmental\",\r\n  \"temperature\": 75.5,\r\n  \"pressure\": 101.3,\r\n  \"timestamp\": \"2025-10-25T14:30:15Z\",\r\n  \"quality_status\": \"GOOD\",\r\n  \"location\": \"Factory Floor A\"\r\n}\r\n```\r\n\r\n---\r\n\r\n### Example 2: Dynamic Alarm Generator with JSON\r\n\r\nLet's create an alarm system that processes JSON alarm data:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL AlarmRecord COLLAPSED\r\n    ADD STRING \"alarm_id\"\r\n    ADD STRING \"equipment_id\"\r\n    ADD STRING \"alarm_type\"\r\n    ADD DOUBLE \"trigger_value\"\r\n    ADD DOUBLE \"threshold\"\r\n    ADD STRING \"severity\"\r\n    ADD STRING \"message\"\r\n    ADD STRING \"timestamp\"\r\n    ADD BOOL \"auto_generated\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION JSONAlarmProcessor\r\nON TOPIC \"alarms/+/json_input\" DO\r\n    SET \"equipment_id\" WITH TOPIC POSITION 2\r\n    \r\n    // Extract alarm data from JSON payload\r\n    SET \"alarm_type\" WITH (GET JSON \"alarm_type\" IN PAYLOAD AS STRING)\r\n    SET \"current_value\" WITH (GET JSON \"current_value\" IN PAYLOAD AS DOUBLE)\r\n    SET \"threshold_value\" WITH (GET JSON \"threshold\" IN PAYLOAD AS DOUBLE)\r\n    SET \"severity_level\" WITH (GET JSON \"severity\" IN PAYLOAD AS STRING)\r\n    SET \"alarm_message\" WITH (GET JSON \"message\" IN PAYLOAD AS STRING)\r\n    \r\n    // Generate structured alarm record\r\n    PUBLISH MODEL AlarmRecord TO \"alarms/structured/\" + {equipment_id} WITH\r\n        alarm_id = (RANDOM UUID)\r\n        equipment_id = {equipment_id}\r\n        alarm_type = {alarm_type}\r\n        trigger_value = {current_value}\r\n        threshold = {threshold_value}\r\n        severity = {severity_level}\r\n        message = {alarm_message}\r\n        timestamp = TIMESTAMP \"UTC\"\r\n        auto_generated = TRUE\r\n    "
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Processes complex JSON alarm data\n- Extracts multiple fields with proper type casting\n- Creates structured alarm records from JSON input\n- Routes critical alarms to special topics\n- Demonstrates advanced JSON processing patterns\n\n**Test it:**\n```\nPublish to: alarms/pump001/json_input\nPayload: {\n  \"alarm_type\": \"TEMPERATURE_HIGH\",\n  \"current_value\": 85.7,\n  \"threshold\": 80.0,\n  \"severity\": \"CRITICAL\",\n  \"message\": \"Temperature exceeded safe operating limit\"\n}\nResult: Structured alarm in alarms/structured/pump001 and critical alert routing\n```\n\n---\n\n### Example 3: Production Event Tracker with JSON Processing\n\nLet's create a comprehensive production tracking system:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL ProductionEvent COLLAPSED\r\n    ADD STRING \"event_id\"\r\n    ADD STRING \"line_id\"\r\n    ADD STRING \"event_type\"\r\n    ADD INT \"parts_count\"\r\n    ADD STRING \"operator\"\r\n    ADD STRING \"shift\"\r\n    ADD DOUBLE \"cycle_time\"\r\n    ADD STRING \"timestamp\"\r\n    ADD OBJECT \"performance_metrics\"\r\n        ADD DOUBLE \"target_cycle_time\"\r\n        ADD DOUBLE \"efficiency_percent\" WITH (performance_metrics.target_cycle_time / cycle_time * 100)\r\n        ADD DOUBLE \"variance_seconds\" WITH (cycle_time - performance_metrics.target_cycle_time)\r\n        ADD STRING \"performance_rating\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL EfficiencyAlarm COLLAPSED\r\n    ADD STRING \"line_id\"\r\n    ADD DOUBLE \"efficiency\"\r\n    ADD DOUBLE \"cycle_time\"\r\n    ADD DOUBLE \"target_time\"\r\n    ADD STRING \"operator\"\r\n    ADD STRING \"timestamp\"\r\n    ADD STRING \"severity\"\r\n"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION ProductionEventProcessor\r\nON TOPIC \"production/+/events/json\" DO\r\n    SET \"line_id\" WITH TOPIC POSITION 2\r\n    SET \"event_type\" WITH (GET JSON \"event_type\" IN PAYLOAD AS STRING)\r\n    SET \"parts_produced\" WITH (GET JSON \"parts_produced\" IN PAYLOAD AS INT)\r\n    SET \"operator_name\" WITH (GET JSON \"operator\" IN PAYLOAD AS STRING)\r\n    SET \"shift_name\" WITH (GET JSON \"shift\" IN PAYLOAD AS STRING)\r\n    SET \"cycle_duration\" WITH (GET JSON \"cycle_time\" IN PAYLOAD AS DOUBLE)\r\n    SET \"target_time\" WITH (GET JSON \"target_cycle_time\" IN PAYLOAD AS DOUBLE)\r\n    \r\n    // Calculate efficiency for conditional logic only\r\n    SET \"efficiency\" WITH ({target_time} / {cycle_duration} * 100)\r\n    \r\n    // Determine performance rating based on efficiency\r\n    SET \"performance_rating\" WITH \"EXCELLENT\" \r\n    IF {efficiency} > 90 THEN \r\n        SET \"performance_rating\" WITH \"GOOD\" \r\n    ELSE \r\n        SET \"performance_rating\" WITH \"NEEDS_IMPROVEMENT\"\r\n    \r\n    // Publish model - efficiency and variance calculated by model itself\r\n    PUBLISH MODEL ProductionEvent TO \"production/events/structured/\" + {line_id} WITH\r\n        event_id = (RANDOM UUID),\r\n        line_id = {line_id},\r\n        event_type = {event_type},\r\n        parts_count = {parts_produced},\r\n        operator = {operator_name},\r\n        shift = {shift_name},\r\n        cycle_time = {cycle_duration},\r\n        timestamp = TIMESTAMP \"UTC\",\r\n        performance_metrics.target_cycle_time = {target_time},\r\n        performance_metrics.performance_rating = {performance_rating}\r\n    \r\n    // Generate alerts for poor performance using MODEL\r\n    IF {efficiency} < 80 THEN\r\n        PUBLISH MODEL EfficiencyAlarm TO \"alarms/production/efficiency/\" + {line_id} WITH\r\n            line_id = {line_id}\r\n            efficiency = {efficiency}\r\n            cycle_time = {cycle_duration}\r\n            target_time = {target_time}\r\n            operator = {operator_name}\r\n            timestamp = TIMESTAMP \"UTC\"\r\n            severity =\"WARNING\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\r\n- Processes complex JSON production event data\r\n- Extracts multiple fields with different data types\r\n- **Model automatically calculates** efficiency_percent and variance_seconds\r\n- Creates comprehensive event records with nested objects\r\n- Action uses efficiency for conditional logic (performance rating and alarms)\r\n- Demonstrates model-based calculations instead of action calculations\r\n\r\n**Key Feature:** The `ProductionEvent` model calculates `efficiency_percent` and `variance_seconds` internally using field references, following the pattern from basic-models.lotnb. The action only passes raw values (`cycle_time` and `target_cycle_time`), and the model does the math.\r\n\r\n**Test it:**\r\n```\r\nPublish to: production/line001/events/json\r\nPayload: {\r\n  \"event_type\": \"cycle_complete\",\r\n  \"parts_produced\": 150,\r\n  \"operator\": \"Jane Doe\",\r\n  \"shift\": \"Day Shift\",\r\n  \"cycle_time\": 28.5,\r\n  \"target_cycle_time\": 30.0\r\n}\r\nResult: Structured event with model-calculated performance metrics\r\n```\r\n\r\n---\r\n\r\n### Example 4: Quality Report Generator with CSV Processing\r\n\r\nLet's create a system that processes CSV data:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL QualityReport COLLAPSED\r\n    ADD STRING \"report_id\"\r\n    ADD STRING \"station_id\"\r\n    ADD STRING \"inspector\"\r\n    ADD INT \"items_tested\"\r\n    ADD INT \"items_passed\"\r\n    ADD INT \"items_failed\"\r\n    ADD DOUBLE \"pass_rate\"\r\n    ADD STRING \"test_type\"\r\n    ADD STRING \"report_timestamp\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION QualityCSVProcessor\r\nON TOPIC \"quality/+/csv_data\" DO\r\n    SET \"station_id\" WITH TOPIC POSITION 2\r\n    \r\n    // Process CSV data (example: \"station001,inspector_name,25,20,5,dimensional_check\")\r\n    // Extract CSV fields using GET TOPIC with AS casting\r\n    SET \"inspector_name\" WITH (GET JSON \"inspector\" IN PAYLOAD AS STRING)\r\n    SET \"total_tested\" WITH (GET JSON \"total_tested\" IN PAYLOAD AS INT)\r\n    SET \"passed_count\" WITH (GET JSON \"passed\" IN PAYLOAD AS INT)\r\n    SET \"failed_count\" WITH (GET JSON \"failed\" IN PAYLOAD AS INT)\r\n    SET \"test_type_name\" WITH (GET JSON \"test_type\" IN PAYLOAD AS STRING)\r\n    \r\n    // Calculate pass rate\r\n    SET \"calculated_pass_rate\" WITH ({passed_count} / {total_tested} * 100)\r\n    \r\n    // Generate quality report\r\n    PUBLISH MODEL QualityReport TO \"quality/reports/\" + {station_id} WITH\r\n        report_id = (RANDOM UUID)\r\n        station_id = {station_id}\r\n        inspector = {inspector_name}\r\n        items_tested = {total_tested}\r\n        items_passed = {passed_count}\r\n        items_failed = {failed_count}\r\n        pass_rate = {calculated_pass_rate}\r\n        test_type = {test_type_name}\r\n        report_timestamp = TIMESTAMP \"UTC\"\r\n    "
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Processes quality data from JSON payloads\n- Uses `GET JSON` with proper type casting for data extraction\n- Calculates quality metrics from extracted data\n- Generates comprehensive quality reports\n- Creates alerts based on calculated performance\n- Demonstrates JSON data processing with calculations\n\n**JSON Processing Features:**\n- **Type Casting**: Proper `AS INT`, `AS DOUBLE`, `AS STRING` usage\n- **Field Extraction**: Get specific fields from JSON structures\n- **Calculations**: Use extracted data in mathematical operations\n- **Conditional Logic**: Process data based on extracted values\n\n---\n\n### Example 5: Machine Performance Tracker with Advanced JSON\n\nLet's create a comprehensive machine performance system:"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL MachinePerformance COLLAPSED\r\n    ADD STRING \"machine_id\"\r\n    ADD STRING \"performance_period\"\r\n    ADD INT \"cycles_completed\"\r\n    ADD DOUBLE \"average_cycle_time\"\r\n    ADD DOUBLE \"efficiency_percent\"\r\n    ADD INT \"downtime_minutes\"\r\n    ADD STRING \"operator\"\r\n    ADD STRING \"shift\"\r\n    ADD STRING \"report_timestamp\"\r\n    ADD OBJECT \"quality_metrics\""
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION MachinePerformanceProcessor\r\nON TOPIC \"machines/+/performance_data\" DO\r\n    SET \"machine_id\" WITH TOPIC POSITION 2\r\n    \r\n    // Extract performance data from JSON payload\r\n    SET \"cycle_time\" WITH (GET JSON \"cycle_time\" IN PAYLOAD AS DOUBLE)\r\n    SET \"target_time\" WITH (GET JSON \"target_cycle_time\" IN PAYLOAD AS DOUBLE)\r\n    SET \"operator_name\" WITH (GET JSON \"operator\" IN PAYLOAD AS STRING)\r\n    SET \"shift_name\" WITH (GET JSON \"shift\" IN PAYLOAD AS STRING)\r\n    SET \"downtime\" WITH (GET JSON \"downtime_minutes\" IN PAYLOAD AS INT)\r\n    \r\n    // Update running statistics\r\n    SET \"total_cycles\" WITH (GET TOPIC \"machines/\" + {machine_id} + \"/total_cycles\" AS INT + 1)\r\n    SET \"total_time\" WITH (GET TOPIC \"machines/\" + {machine_id} + \"/total_time\" AS DOUBLE + {cycle_time})\r\n    SET \"average_time\" WITH ({total_time} / {total_cycles})\r\n    \r\n    // Store updated statistics\r\n    PUBLISH TOPIC \"machines/\" + {machine_id} + \"/total_cycles\" WITH {total_cycles}\r\n    PUBLISH TOPIC \"machines/\" + {machine_id} + \"/total_time\" WITH {total_time}\r\n    \r\n    // Generate performance report every 50 cycles\r\n    IF ({total_cycles} % 50) = 0 THEN\r\n        SET \"efficiency\" WITH ({target_time} / {average_time} * 100)\r\n        \r\n        PUBLISH MODEL MachinePerformance TO \"reports/performance/\" + {machine_id} WITH\r\n            machine_id = {machine_id}\r\n            performance_period = \"Last 50 cycles\"\r\n            cycles_completed = 50\r\n            average_cycle_time = {average_time}\r\n            efficiency_percent = {efficiency}\r\n            downtime_minutes = {downtime}\r\n            operator = {operator_name}\r\n            shift = {shift_name}\r\n            report_timestamp = TIMESTAMP \"UTC\"\r\n            quality_metrics = {\r\n                \"target_cycle_time\": {target_time},\r\n                \"variance_seconds\": ({average_time} - {target_time}),\r\n                \"performance_rating\": IF {efficiency} > 95 THEN \"EXCELLENT\" ELSE IF {efficiency} > 85 THEN \"GOOD\" ELSE \"NEEDS_IMPROVEMENT\",\r\n                \"cycles_analyzed\": {total_cycles}\r\n            }"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**What this does:**\n- Processes complex JSON performance data\n- Uses proper type casting for all extracted values\n- Maintains running statistics with `GET TOPIC AS TYPE`\n- Calculates performance metrics from extracted and stored data\n- Generates periodic performance reports with nested objects\n- Demonstrates advanced JSON processing with calculations\n\n**Advanced Features:**\n- **Running Statistics**: Maintains averages using `GET TOPIC AS TYPE`\n- **Type Safety**: Proper casting for all numeric operations\n- **Periodic Reporting**: Generates reports at specific intervals\n- **Complex Calculations**: Multiple mathematical operations on extracted data\n- **Nested Objects**: Rich data structures in model output\n\n---\n\n## 🏋️ Exercises\n\n### Exercise 1: Equipment Status Processor\n**Task**: Create a model `EquipmentStatus` and action `EquipmentJSONProcessor` that:\n- Listens to `equipment/+/status_json`\n- Extracts: equipment_name, status, runtime_hours, efficiency from JSON\n- Uses proper type casting (AS STRING, AS INT, AS DOUBLE)\n- Publishes to `equipment/processed/EQUIPMENT_ID`"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 1: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 2: Quality Test JSON Handler\n**Task**: Create a quality system that processes JSON test data:\n- Model: `QualityTestResult` with test_id, station, result, measured_value, spec_limits\n- Action: Extract test data from JSON payload\n- Calculate pass/fail based on extracted spec limits\n- Generate alerts for failed tests"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 2: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 3: Production Batch Tracker\n**Task**: Create a batch tracking system:\n- Process JSON batch data with multiple production stages\n- Extract stage completion times, quantities, operators\n- Calculate stage efficiencies and overall batch performance\n- Generate batch completion reports with performance metrics"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 3: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "### Exercise 4: Multi-Source Data Aggregator\n**Task**: Create a system that combines data from multiple JSON sources:\n- Process sensor JSON, production JSON, and quality JSON\n- Extract relevant fields from each source\n- Combine into comprehensive operational reports\n- Include proper error handling for missing JSON fields\n\n**Challenge**: Handle nested JSON objects and arrays in payloads."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "// Exercise 4: Write your solution here\n"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "\n\n---\n\n## 🎯 Checkpoint Questions\n\n1. **How do you extract a numeric field from JSON payload?**\n   - Answer: Use `GET JSON \"field_name\" IN PAYLOAD AS DOUBLE` (or AS INT)\n\n2. **What's the difference between GET TOPIC and GET JSON?**\n   - Answer: GET TOPIC retrieves stored topic values; GET JSON extracts fields from JSON payloads\n\n3. **Why is type casting important with GET JSON?**\n   - Answer: Type casting ensures data is properly converted for calculations and comparisons\n\n4. **How do you handle nested JSON fields?**\n   - Answer: Use dot notation: `GET JSON \"parent.child\" IN PAYLOAD AS TYPE`\n\n---\n\n## 📝 Summary\n\n### Key Concepts Learned\n✅ **PUBLISH MODEL** - Dynamic model publishing from actions  \n✅ **GET JSON Processing** - Extract data from JSON payloads with type casting  \n✅ **Type Casting** - AS DOUBLE, AS INT, AS STRING, AS BOOL  \n✅ **Dynamic Fields** - Populate model fields from extracted JSON data  \n✅ **Complex Calculations** - Mathematical operations on extracted data  \n✅ **Conditional Processing** - Logic based on extracted JSON values  \n\n### JSON Processing Patterns\n- **Data Extraction**: Get specific fields from complex JSON\n- **Type Safety**: Proper casting for calculations\n- **Validation**: Check extracted data before processing\n- **Transformation**: Convert JSON data to structured models\n- **Error Handling**: Handle missing or invalid JSON fields\n\n### Design Principles\n- **Type Safety**: Always cast extracted JSON data to appropriate types\n- **Validation**: Verify extracted data before using in calculations\n- **Consistency**: Use standard JSON field names across systems\n- **Error Handling**: Plan for malformed or missing JSON data\n\n### Next Steps\n- Practice JSON data extraction with different payload structures\n- Experiment with nested JSON objects and arrays\n- Try combining JSON processing with calculations\n- Move on to [Model Inheritance](./model-inheritance.lotnb) to learn model extension\n\n---\n\n## 🚀 Further Exploration\n\n### Advanced JSON Processing\n- Handle deeply nested JSON structures\n- Process JSON arrays and iterate through elements\n- Conditional JSON field extraction\n- JSON schema validation and error handling\n\n### Integration Scenarios\n- API response processing with JSON extraction\n- Database integration with JSON payload data\n- Real-time analytics with JSON data streams\n- Event sourcing with structured JSON events\n\n### Performance Optimization\n- Efficient JSON parsing strategies\n- Minimize JSON extraction operations\n- Cache extracted values for reuse\n- Optimize model publishing frequency\n\n---\n\n**Ready to extend your models? Continue with [🔄 Model Inheritance](./model-inheritance.lotnb)!**\n\n[⬅️ Previous: Basic Models](./basic-models.lotnb) | [🏠 Back to Index](../index.lotnb) | [➡️ Next: Model Inheritance](./model-inheritance.lotnb)"
+  }
+]

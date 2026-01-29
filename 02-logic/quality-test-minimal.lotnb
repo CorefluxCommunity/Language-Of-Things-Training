@@ -1,0 +1,87 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# 🧪 Quality Control - Minimal Test File\n\n## Purpose\nUse this file to quickly test which step of the Quality Control system is failing.\n\n---\n\n## 📝 Instructions\n\n1. **Copy ONE action** at a time from below\n2. **Deploy it** to your LoT system\n3. **Test it** with the provided payload\n4. If it works, move to the next step\n5. If it fails, **STOP** and report which step failed\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## ✅ Step 1: Basic Check (Start Here!)\n\n**Copy and deploy this action first:**"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION QualityStep1_BasicCheck\r\nON TOPIC \"quality/step1/+/measurement\" DO\r\n    SET \"station_id\" WITH TOPIC POSITION 3\r\n    SET \"measurement_value\" WITH PAYLOAD\r\n    \r\n    IF {measurement_value} > 21.5 THEN\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"REJECT\"\r\n    ELSE\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"OK\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test Command:**\n```\nPublish to: quality/step1/station001/measurement\nPayload: 22.0\nExpected: quality/station001/result = \"REJECT\"\n\nPayload: 20.0\nExpected: quality/station001/result = \"OK\"\n```\n\n✅ **If this works, continue to Step 2**  \n❌ **If this fails, there's a basic syntax issue**\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## ✅ Step 2: Two-Way Check (OR Condition)\n\n**Copy and deploy this action:**"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION QualityStep2_TwoWayCheck\r\nON TOPIC \"quality/step2/+/measurement\" DO\r\n    SET \"station_id\" WITH TOPIC POSITION 3\r\n    SET \"measurement_value\" WITH PAYLOAD\r\n    SET \"min_acceptable\" WITH 18.5\r\n    SET \"max_acceptable\" WITH 21.5\r\n    \r\n    IF {measurement_value} < {min_acceptable} OR {measurement_value} > {max_acceptable} THEN\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"REJECT\"\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/reason\" WITH \"Out of spec: \" + {measurement_value}\r\n    ELSE\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"OK\"\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/reason\" WITH \"In spec: \" + {measurement_value}"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test Command:**\n```\nPublish to: quality/step2/station001/measurement\nPayload: 17.0 → REJECT (too low)\nPayload: 22.0 → REJECT (too high)\nPayload: 20.0 → OK\n```\n\n✅ **If this works, continue to Step 3**  \n❌ **If this fails, issue with OR condition or variables**\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## ✅ Step 3: Three-Tier System (ELSE IF)\n\n**Copy and deploy this action:**"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION QualityStep3_ThreeTier\r\nON TOPIC \"quality/step3/+/measurement\" DO\r\n    SET \"station_id\" WITH TOPIC POSITION 3\r\n    SET \"measurement_value\" WITH PAYLOAD\r\n    SET \"min_acceptable\" WITH 18.5\r\n    SET \"max_acceptable\" WITH 21.5\r\n    SET \"min_optimal\" WITH 19.0\r\n    SET \"max_optimal\" WITH 21.0\r\n    \r\n    IF {measurement_value} < {min_acceptable} OR {measurement_value} > {max_acceptable} THEN\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"REJECT\"\r\n    ELSE IF {measurement_value} >= {min_optimal} AND {measurement_value} <= {max_optimal} THEN\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"OPTIMAL\"\r\n    ELSE\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"ACCEPTABLE\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test Command:**\n```\nPublish to: quality/step3/station001/measurement\nPayload: 17.0 → REJECT\nPayload: 18.7 → ACCEPTABLE\nPayload: 20.0 → OPTIMAL\nPayload: 21.2 → ACCEPTABLE\nPayload: 22.0 → REJECT\n```\n\n✅ **If this works, continue to Step 4**  \n❌ **If this fails, issue with ELSE IF or AND condition**\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## ✅ Step 4: Add Counter (GET TOPIC)\n\n**Copy and deploy this action:**"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION QualityStep4_WithOneCounter\r\nON TOPIC \"quality/step4/+/measurement\" DO\r\n    SET \"station_id\" WITH TOPIC POSITION 3\r\n    SET \"measurement_value\" WITH PAYLOAD\r\n    SET \"max_acceptable\" WITH 21.5\r\n    \r\n    IF {measurement_value} > {max_acceptable} THEN\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"REJECT\"\r\n        \r\n        SET \"reject_count\" WITH (GET TOPIC \"quality/\" + {station_id} + \"/reject_count\" AS INT) + 1\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/reject_count\" WITH {reject_count}\r\n    ELSE\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"OK\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test Command:**\n```\nPublish to: quality/step4/station001/measurement\nPayload: 22.0 → REJECT, reject_count = 1\nPayload: 23.0 → REJECT, reject_count = 2\nPayload: 20.0 → OK (counter unchanged)\nPayload: 24.0 → REJECT, reject_count = 3\n```\n\n✅ **If this works, continue to Step 5**  \n❌ **If this fails, issue with GET TOPIC or AS INT**\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## ✅ Step 5: Complete System (All Features)\n\n**Copy and deploy this action:**"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION QualityControlSystem\r\nON TOPIC \"quality/+/measurement\" DO\r\n    SET \"station_id\" WITH TOPIC POSITION 2\r\n    SET \"measurement_value\" WITH PAYLOAD\r\n    SET \"min_acceptable\" WITH 18.5\r\n    SET \"max_acceptable\" WITH 21.5\r\n    SET \"min_optimal\" WITH 19.0\r\n    SET \"max_optimal\" WITH 21.0\r\n    \r\n    IF {measurement_value} < {min_acceptable} OR {measurement_value} > {max_acceptable} THEN\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"REJECT\"\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/reason\" WITH \"Out of specification: \" + {measurement_value}\r\n        PUBLISH TOPIC \"alarms/quality/\" + {station_id} WITH \"REJECT - Value: \" + {measurement_value}\r\n        SET \"reject_count\" WITH (GET TOPIC \"quality/\" + {station_id} + \"/reject_count\" AS INT) + 1\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/reject_count\" WITH {reject_count}\r\n    ELSE IF {measurement_value} >= {min_optimal} AND {measurement_value} <= {max_optimal} THEN\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"OPTIMAL\"\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/reason\" WITH \"Within optimal range: \" + {measurement_value}\r\n        SET \"optimal_count\" WITH (GET TOPIC \"quality/\" + {station_id} + \"/optimal_count\" AS INT) + 1\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/optimal_count\" WITH {optimal_count}\r\n    ELSE\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/result\" WITH \"ACCEPTABLE\"\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/reason\" WITH \"Acceptable range: \" + {measurement_value}\r\n        SET \"acceptable_count\" WITH (GET TOPIC \"quality/\" + {station_id} + \"/acceptable_count\" AS INT) + 1\r\n        PUBLISH TOPIC \"quality/\" + {station_id} + \"/acceptable_count\" WITH {acceptable_count}\r\n    \r\n    SET \"total_count\" WITH (GET TOPIC \"quality/\" + {station_id} + \"/total_count\" AS INT) + 1\r\n    PUBLISH TOPIC \"quality/\" + {station_id} + \"/total_count\" WITH {total_count}\r\n    PUBLISH TOPIC \"quality/\" + {station_id} + \"/last_measurement\" WITH TIMESTAMP \"UTC\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "**Test Command:**\n```\nPublish to: quality/station001/measurement\nPayload: 19.5\nExpected:\n  - result: \"OPTIMAL\"\n  - reason: \"Within optimal range: 19.5\"\n  - optimal_count: increments\n  - total_count: increments\n  - last_measurement: timestamp\n```\n\n✅ **If this works, you're done!**  \n❌ **If this fails, issue with multiple counters or complex nesting**\n\n---"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 📊 Results\n\nReport back with:\n1. ✅ Which steps worked\n2. ❌ Which step failed\n3. 📋 Any error messages you received\n\nThis will help us identify the exact issue! 🎯"
+  }
+]
