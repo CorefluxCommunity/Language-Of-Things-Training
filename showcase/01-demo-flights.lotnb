@@ -1,0 +1,177 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# Demo Flights — an airport in one notebook\n\nA tiny airport operations demo that shows **every core LoT entity** in short, readable cells:\nPython, models, actions, connectors (routes), rules, a theme, a dashboard panel and an AI agent.\n\n**Core mode runs on a bare Coreflux broker** — no database, PLC or cloud account needed.\nCells whose heading says `[needs: …]` are optional and need the service named there.\n\n| Topic | What lives there |\n|---|---|\n| `flights/demo/status` | Latest flight update (JSON) |\n| `flights/demo/last/…` | The same update split into single values |\n| `flights/demo/board/…` | Models built from those values |\n| `flights/demo/gates/<gate>` | Which flight is at each gate |\n| `flights/demo/alerts/delay` | Delay alarms |\n\nRun the cells top to bottom (or deploy the whole notebook). Data starts flowing within 5 seconds."
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 1. Python — a flight schedule\n\nA **Python script** holds logic that is easier to write in Python than in LoT.\n`next_flight(n)` returns the n-th flight of a small fixed schedule as JSON.\nLoT calls it with `CALL PYTHON \"FlightTools.next_flight\"`."
+  },
+  {
+    "kind": 2,
+    "language": "python",
+    "value": "# Script Name: FlightTools\nimport json\n\nFLIGHTS = [\n    (\"CF101\", \"LIS\", \"B12\", \"boarding\", 142),\n    (\"CF202\", \"OPO\", \"A03\", \"on time\", 96),\n    (\"CF303\", \"MAD\", \"C07\", \"delayed\", 171),\n    (\"CF404\", \"LHR\", \"B04\", \"boarding\", 188),\n    (\"CF505\", \"CDG\", \"A11\", \"departed\", 120),\n]\n\ndef next_flight(n):\n    flight, dest, gate, status, pax = FLIGHTS[int(float(n)) % len(FLIGHTS)]\n    return json.dumps({\"flight\": flight, \"destination\": dest, \"gate\": gate,\n                       \"status\": status, \"passengers\": pax})"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 2. Action on a timer — simulate departures\n\nAn **action** is a small program that runs when something happens.\n`ON EVERY 5 SECONDS` runs it on a timer. It counts up (`KEEP` remembers the counter inside the broker between runs), asks Python for the next flight\nand publishes it to `flights/demo/status`."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION SimulateDepartures\nON EVERY 5 SECONDS DO\n    SET \"n\" WITH GET TOPIC \"flights/demo/sim/counter\" AS INT\n    SET \"n\" WITH {n} + 1\n    KEEP TOPIC \"flights/demo/sim/counter\" WITH {n}\n    CALL PYTHON \"FlightTools.next_flight\"\n        WITH ({n})\n        RETURN AS {update}\n    PUBLISH TOPIC \"flights/demo/status\" WITH {update}"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 3. Callable action — format a board line\n\nA **callable action** has no trigger. Other actions call it with `CALL ACTION`,\npass `INPUT` values and get `OUTPUT` values back — like a function."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION FormatBoardLine\nINPUT flight AS STRING\nINPUT gate AS STRING\nINPUT status AS STRING\nDO\n    SET \"line\" WITH {flight} + \" | gate \" + {gate} + \" | \" + {status}\nRETURN\n    OUTPUT line"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 4. Action on a topic — assign the gate\n\n`ON TOPIC` runs the action for every message on a topic.\n`AssignGate` reads fields from the JSON with `GET JSON`, splits them into single-value topics,\nannounces which flight sits at each gate and builds a board line with the callable action above."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION AssignGate\nON TOPIC \"flights/demo/status\" DO\n    SET \"flight\" WITH GET JSON \"flight\" IN PAYLOAD AS STRING\n    SET \"gate\" WITH GET JSON \"gate\" IN PAYLOAD AS STRING\n    SET \"status\" WITH GET JSON \"status\" IN PAYLOAD AS STRING\n    PUBLISH TOPIC \"flights/demo/last/gate\" WITH {gate}\n    PUBLISH TOPIC \"flights/demo/last/status\" WITH {status}\n    PUBLISH TOPIC \"flights/demo/last/passengers\" WITH GET JSON \"passengers\" IN PAYLOAD AS INT\n    PUBLISH TOPIC \"flights/demo/last/flight\" WITH {flight}\n    PUBLISH TOPIC \"flights/demo/gates/\" + {gate} WITH {flight}\n    CALL ACTION FormatBoardLine\n        WITH flight = {flight}, gate = {gate}, status = {status}\n        RETURN line\n    PUBLISH TOPIC \"flights/demo/board/line\" WITH {line}"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 5. Action with a condition — delay alarm\n\n`IF … THEN` lets an action decide. This one raises an alarm only for delayed flights."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION DelayAlarm\nON TOPIC \"flights/demo/status\" DO\n    SET \"status\" WITH GET JSON \"status\" IN PAYLOAD AS STRING\n    IF {status} == \"delayed\" THEN\n        PUBLISH TOPIC \"flights/demo/alerts/delay\" WITH GET JSON \"flight\" IN PAYLOAD AS STRING"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 6. Model — the flight on the board\n\nA **model** collects values from several topics into one structured message.\n`COLLAPSED` publishes it as a single JSON object. The field marked `AS TRIGGER` decides\nwhen a new message goes out."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL Flight COLLAPSED WITH TOPIC \"flights/demo/board/flight\"\n    ADD STRING \"flight\" WITH TOPIC \"flights/demo/last/flight\" AS TRIGGER\n    ADD STRING \"gate\" WITH TOPIC \"flights/demo/last/gate\"\n    ADD STRING \"status\" WITH TOPIC \"flights/demo/last/status\"\n    ADD STRING \"updated\" WITH TIMESTAMP \"ISO\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 7. Model inheritance — a booking is a flight plus passengers\n\n`FROM Flight` reuses every field of `Flight` and adds new ones."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL Booking COLLAPSED FROM Flight WITH TOPIC \"flights/demo/board/booking\"\n    ADD INT \"passengers\" WITH TOPIC \"flights/demo/last/passengers\"\n    ADD STRING \"airline\" WITH \"Coreflux Air\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 8. Model with fixed values — the airport\n\nFields can also hold fixed values. `KEEP` retains the last message so new dashboards see it at once.\nPublish any code to `flights/demo/airport/code` (see *Try it*) to refresh it."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL Airport COLLAPSED KEEP WITH TOPIC \"flights/demo/airport\"\n    ADD STRING \"code\" WITH TOPIC \"flights/demo/airport/code\" AS TRIGGER\n    ADD STRING \"name\" WITH \"Lisbon Humberto Delgado\"\n    ADD STRING \"timezone\" WITH \"Europe/Lisbon\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 9. Connector — a REST API into the broker\n\nA **route** (also called a connector) links the broker to other systems.\nThis `REST_API` route starts a small HTTP server inside the broker: a `POST` to\n`/api/flights` is published to `flights/demo/status`, so the actions above handle it like any other update."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE DemoFlightsApi WITH TYPE REST_API\n    ADD REST_API_CONFIG\n        WITH ENABLE_SERVER \"true\"\n        WITH SERVER_PORT '8085'\n        WITH ENABLE_CORS \"true\"\n    ADD EVENT PostFlightUpdate\n        WITH ENDPOINT \"/api/flights\"\n        WITH METHOD \"POST\"\n        WITH DESTINATION_TOPIC \"flights/demo/status\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 10. Connector — keep a flight log on disk\n\n`FILE_STORAGE` writes messages to files on the broker host. Every flight update becomes\none CSV row in `demo-flights-log/flights.csv` (the `{0}` in the file pattern becomes the table name)."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE FlightLog WITH TYPE FILE_STORAGE\n    ADD FILE_STORAGE_CONFIG\n        WITH STORAGE_DIR \"demo-flights-log\"\n        WITH FORMAT \"CSV\"\n        WITH FILE_PATTERN \"{0}.csv\"\n        WITH APPEND \"true\"\n    ADD EVENT LogFlightUpdates\n        WITH SOURCE_TOPIC \"flights/demo/status\"\n        WITH QUERY \"CLEAN:{table: flights, data: {value.json}}\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 11. Connector — bridge the public board to another broker\n\n`MQTT_BRIDGE` copies topics between brokers. `BROKER SELF` is this broker; the board is mirrored\nto the public test broker `test.mosquitto.org`. Without internet the route deploys and simply shows as disconnected."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE DemoFlightsBridge WITH TYPE MQTT_BRIDGE\n    ADD SOURCE_CONFIG\n        WITH BROKER SELF\n    ADD DESTINATION_CONFIG\n        WITH BROKER_ADDRESS \"test.mosquitto.org\"\n        WITH BROKER_PORT '1883'\n        WITH CLIENT_ID \"coreflux-demo-flights\"\n    ADD MAPPING PublicBoard\n        WITH SOURCE_TOPIC \"flights/demo/board/#\"\n        WITH DESTINATION_TOPIC \"coreflux-demo/flights/board/#\"\n        WITH DIRECTION \"out\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 12. Rules — who may see and change what\n\nA **rule** allows or denies MQTT access. Lower priority numbers win; `0–99` are reserved.\nPassengers may read the board; only the `ops` group may move flights between gates by hand.\n(Create users and groups with `-addUser` and `-addUserToGroup`.)"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE RULE PassengersReadBoard WITH PRIORITY 200 FOR Subscribe TO TOPIC \"flights/demo/board/#\"\n    IF USER IN GROUP \"passengers\" THEN\n        ALLOW\n    ELSE\n        DENY\n\nDEFINE RULE OpsMoveGates WITH PRIORITY 200 FOR Publish TO TOPIC \"flights/demo/gates/#\"\n    IF USER IN GROUP \"ops\" THEN\n        ALLOW\n    ELSE\n        DENY"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 13. Theme — airport colours\n\nA **theme** sets the colours that panels use."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE THEME \"Airport Dark\"\n    SET \"PRIMARY\" WITH \"#38bdf8\"\n    SET \"BACKGROUND\" WITH \"#0b1220\"\n    SET \"FOREGROUND\" WITH \"#e2e8f0\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 14. Panel — the departures board\n\nA **panel** is a dashboard. Each component binds to a topic and updates live.\n`WITH STATE PUBLISHED` makes it visible in Coreflux Hub."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE PANEL DemoFlightsBoard\n    WITH TITLE \"Demo Flights Board\"\n    WITH VISIBILITY PUBLIC\n    WITH STATE PUBLISHED\n    WITH LAYOUT \"grid\" COLUMNS 3\n\n    ADD COMPONENT \"Flight\" WITH TYPE \"value\"\n        SET LABEL \"Flight\"\n        BIND VALUE TO TOPIC \"flights/demo/last/flight\"\n\n    ADD COMPONENT \"Gate\" WITH TYPE \"value\"\n        SET LABEL \"Gate\"\n        BIND VALUE TO TOPIC \"flights/demo/last/gate\"\n\n    ADD COMPONENT \"Status\" WITH TYPE \"value\"\n        SET LABEL \"Status\"\n        BIND VALUE TO TOPIC \"flights/demo/last/status\"\n\n    ADD COMPONENT \"Passengers\" WITH TYPE \"gauge\"\n        SET LABEL \"Passengers\"\n        SET RANGE FROM 0 TO 200\n        BIND VALUE TO TOPIC \"flights/demo/last/passengers\"\n\n    ADD COMPONENT \"BoardLine\" WITH TYPE \"value\"\n        SET LABEL \"Board\"\n        BIND VALUE TO TOPIC \"flights/demo/board/line\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 15. AI agent — an airport assistant\n\nAn **agent** answers questions using an LLM, but may only touch what you grant it:\nhere it can read `flights/demo/#` and nothing else.\nThe agent needs an `LLM` route. Defining both works **without a running LLM** — the agent\nshows up in Hub and only calls the model when you ask it something (see the optional cell below).\n`DEFAULT_USER` is the broker user the agent acts as; create it first with `-addUser`."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE LocalOllama WITH TYPE LLM\n    ADD LLM_CONFIG\n        WITH PROVIDER \"ollama\"\n        WITH BASE_URL \"http://localhost:11434\"\n        WITH MODEL \"llama3.2\"\n\nDEFINE AGENT DemoFlightsAgent\n    USES LLM ROUTE LocalOllama\n    WITH DESCRIPTION \"Answers questions about departures and gates\"\n    WITH DEFAULT_USER \"flights-viewer\"\n    WITH INTERACTION_TOPIC \"flights/demo/assistant\"\n    ADD TOOL \"read_mqtt\"\n        WITH TOPICS \"flights/demo/#\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 16. Ask the agent `[needs: Ollama]`\n\nInstall [Ollama](https://ollama.com/download) on the broker host and pull a tools-capable model.\nThen publish a question; the answer arrives on `…/response`."
+  },
+  {
+    "kind": 2,
+    "language": "shellscript",
+    "value": "ollama pull llama3.2\nmosquitto_pub -u root -P coreflux -t \"flights/demo/assistant/s1/ask\" -m \"Which flight is at gate B12?\"\nmosquitto_sub -u root -P coreflux -t \"flights/demo/assistant/s1/response\" -C 1"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Try it\n\nWatch the data, post a flight over HTTP, and refresh the airport model."
+  },
+  {
+    "kind": 2,
+    "language": "shellscript",
+    "value": "# Everything the demo publishes\nmosquitto_sub -u root -P coreflux -t \"flights/demo/#\" -v\n\n# A flight update through the REST connector\ncurl -X POST http://localhost:8085/api/flights -H \"Content-Type: application/json\" \\\n  -d '{\"flight\":\"CF606\",\"destination\":\"FRA\",\"gate\":\"C02\",\"status\":\"delayed\",\"passengers\":77}'\n\n# Refresh the Airport model\nmosquitto_pub -u root -P coreflux -t \"flights/demo/airport/code\" -m \"LIS\""
+  }
+]

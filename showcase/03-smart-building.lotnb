@@ -1,0 +1,197 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# Smart Building — energy and comfort\n\nA small office building with two rooms on two floors. It shows a **unified namespace**\n(`building/hq/<floor>/<room>/…`), comfort control, energy alarms, connectors a building\nmanagement system (BMS) can use, two cooperating AI agents and two dashboards.\n\n**Core mode runs on a bare Coreflux broker** with simulated rooms and meters.\nCells marked `[needs: …]` connect to real devices or internet services.\n\n| Topic | What lives there |\n|---|---|\n| `building/hq/<floor>/<room>/temperature`, `…/co2` | Room sensors |\n| `building/hq/<floor>/<room>/hvac` | HVAC command decided by LoT |\n| `building/hq/energy/power` | Building power in kW |\n| `building/hq/alarms/#` | Alarms |"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 1. Python — simulated rooms and meter\n\n`sample(n)` returns believable readings for two rooms and the main power meter."
+  },
+  {
+    "kind": 2,
+    "language": "python",
+    "value": "# Script Name: BuildingSim\nimport json, math\n\ndef sample(n):\n    n = int(float(n))\n    return json.dumps({\n        \"r101_temp\": round(21.5 + 2.5 * math.sin(n / 6), 1),\n        \"r101_co2\": int(650 + 300 * abs(math.sin(n / 9))),\n        \"r201_temp\": round(23 + 2 * math.cos(n / 5), 1),\n        \"r201_co2\": int(550 + 250 * abs(math.cos(n / 8))),\n        \"power_kw\": round(38 + 14 * abs(math.sin(n / 11)), 1),\n    })"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 2. Action — simulate sensors\n\nEvery 5 seconds publish room and meter readings into the building namespace."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION SimulateBuilding\nON EVERY 5 SECONDS DO\n    SET \"n\" WITH GET TOPIC \"building/hq/sim/tick\" AS INT\n    SET \"n\" WITH {n} + 1\n    KEEP TOPIC \"building/hq/sim/tick\" WITH {n}\n    CALL PYTHON \"BuildingSim.sample\"\n        WITH ({n})\n        RETURN AS {s}\n    PUBLISH TOPIC \"building/hq/floor1/room101/temperature\" WITH GET JSON \"r101_temp\" IN {s} AS DOUBLE\n    PUBLISH TOPIC \"building/hq/floor1/room101/co2\" WITH GET JSON \"r101_co2\" IN {s} AS INT\n    PUBLISH TOPIC \"building/hq/floor2/room201/temperature\" WITH GET JSON \"r201_temp\" IN {s} AS DOUBLE\n    PUBLISH TOPIC \"building/hq/floor2/room201/co2\" WITH GET JSON \"r201_co2\" IN {s} AS INT\n    PUBLISH TOPIC \"building/hq/energy/power\" WITH GET JSON \"power_kw\" IN {s} AS DOUBLE"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 3. Action — comfort control for every room\n\nOne action serves **all rooms**: `+` matches any floor and room, and `TOPIC POSITION`\n(1-based) reads them from the topic. It turns cooling or heating on outside 20–24 °C."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION ComfortControl\nON TOPIC \"building/hq/+/+/temperature\" DO\n    SET \"floor\" WITH TOPIC POSITION 3\n    SET \"room\" WITH TOPIC POSITION 4\n    SET \"temp\" WITH PAYLOAD AS DOUBLE\n    SET \"mode\" WITH \"idle\"\n    IF {temp} > 24 THEN\n        SET \"mode\" WITH \"cooling\"\n    IF {temp} < 20 THEN\n        SET \"mode\" WITH \"heating\"\n    PUBLISH TOPIC \"building/hq/\" + {floor} + \"/\" + {room} + \"/hvac\" WITH {mode}"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 4. Action — air quality and peak load alarms\n\nTwo simple threshold alarms: stale air (CO₂ above 900 ppm) and building power above 50 kW."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION AirQualityAlarm\nON TOPIC \"building/hq/+/+/co2\" DO\n    SET \"room\" WITH TOPIC POSITION 4\n    IF PAYLOAD > 900 THEN\n        PUBLISH TOPIC \"building/hq/alarms/air/\" + {room} WITH \"ventilate: \" + PAYLOAD + \" ppm\"\n\nDEFINE ACTION PeakLoadAlarm\nON TOPIC \"building/hq/energy/power\" DO\n    SET \"kw\" WITH PAYLOAD AS DOUBLE\n    IF {kw} > 50 THEN\n        PUBLISH TOPIC \"building/hq/alarms/peak\" WITH \"peak load \" + {kw} + \" kW\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 5. Model — a room\n\nA **model** gathers a room's values into one JSON message."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL Room COLLAPSED WITH TOPIC \"building/hq/floor1/room101/state\"\n    ADD DOUBLE \"temperature\" WITH TOPIC \"building/hq/floor1/room101/temperature\" AS TRIGGER\n    ADD INT \"co2\" WITH TOPIC \"building/hq/floor1/room101/co2\"\n    ADD STRING \"hvac\" WITH TOPIC \"building/hq/floor1/room101/hvac\"\n    ADD STRING \"room\" WITH \"room101\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 6. Model inheritance — the meeting room upstairs\n\n`FROM Room` keeps the same shape; this room points its fields at floor 2 and adds a capacity."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL MeetingRoom COLLAPSED FROM Room WITH TOPIC \"building/hq/floor2/room201/state\"\n    ADD DOUBLE \"temperature\" WITH TOPIC \"building/hq/floor2/room201/temperature\" AS TRIGGER\n    ADD INT \"co2\" WITH TOPIC \"building/hq/floor2/room201/co2\"\n    ADD STRING \"hvac\" WITH TOPIC \"building/hq/floor2/room201/hvac\"\n    ADD STRING \"room\" WITH \"room201\"\n    ADD INT \"capacity\" WITH 12"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 7. Model — the whole building\n\nA building summary: power plus both room temperatures, with a timestamp."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL Building COLLAPSED WITH TOPIC \"building/hq/summary\"\n    ADD DOUBLE \"power_kw\" WITH TOPIC \"building/hq/energy/power\" AS TRIGGER\n    ADD DOUBLE \"room101_temp\" WITH TOPIC \"building/hq/floor1/room101/temperature\"\n    ADD DOUBLE \"room201_temp\" WITH TOPIC \"building/hq/floor2/room201/temperature\"\n    ADD STRING \"site\" WITH \"HQ\"\n    ADD STRING \"updated\" WITH TIMESTAMP \"ISO\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 8. Connector — a Modbus gateway for the BMS\n\nMany building management systems speak Modbus. `MODBUS_SERVER` exposes building values as\nregisters on port 5021 so the BMS can read them without knowing MQTT."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE BmsGateway WITH TYPE MODBUS_SERVER\n    ADD MODBUS_SERVER_CONFIG\n        WITH PORT 5021\n    ADD MAPPING Building\n        ADD TAG PowerKw\n            WITH ADDRESS \"0\"\n            WITH ADDRESS_TYPE \"HOLDING_REGISTER\"\n            WITH DATA_TYPE \"FLOAT\"\n            WITH SOURCE_TOPIC \"building/hq/energy/power\"\n        ADD TAG Room101Temp\n            WITH ADDRESS \"2\"\n            WITH ADDRESS_TYPE \"HOLDING_REGISTER\"\n            WITH DATA_TYPE \"FLOAT\"\n            WITH SOURCE_TOPIC \"building/hq/floor1/room101/temperature\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 9. Connector — a webhook for setpoint requests\n\nA `REST_API` server lets a booking system or mobile app ask for a room setpoint over HTTP:\n`POST /api/setpoint` lands on `building/hq/requests/setpoint`."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE BuildingApi WITH TYPE REST_API\n    ADD REST_API_CONFIG\n        WITH ENABLE_SERVER \"true\"\n        WITH SERVER_PORT '8086'\n    ADD EVENT SetpointRequest\n        WITH ENDPOINT \"/api/setpoint\"\n        WITH METHOD \"POST\"\n        WITH DESTINATION_TOPIC \"building/hq/requests/setpoint\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 10. Rules — facility staff control HVAC\n\nOnly the `facility` group may publish HVAC commands by hand, and only `tenants` may\nread the room states (besides administrators)."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE RULE FacilityControlsHvac WITH PRIORITY 200 FOR Publish TO TOPIC \"building/hq/+/+/hvac\"\n    IF USER IN GROUP \"facility\" THEN\n        ALLOW\n    ELSE\n        DENY\n\nDEFINE RULE TenantsReadRooms WITH PRIORITY 200 FOR Subscribe TO TOPIC \"building/hq/+/+/state\"\n    IF USER IN GROUP \"tenants\" THEN\n        ALLOW\n    ELSE\n        DENY"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 11. Theme — a light office look"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE THEME \"Office Light\"\n    SET \"PRIMARY\" WITH \"#16a34a\"\n    SET \"BACKGROUND\" WITH \"#f8fafc\"\n    SET \"FOREGROUND\" WITH \"#0f172a\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 12. Panel — building overview\n\nPower, alarms and the HVAC state of each room."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE PANEL BuildingOverview\n    WITH TITLE \"HQ — Building Overview\"\n    WITH VISIBILITY PUBLIC\n    WITH STATE PUBLISHED\n    WITH LAYOUT \"grid\" COLUMNS 3\n\n    ADD COMPONENT \"Power\" WITH TYPE \"gauge\"\n        SET LABEL \"Power\"\n        SET UNIT \"kW\"\n        SET RANGE FROM 0 TO 80\n        BIND VALUE TO TOPIC \"building/hq/energy/power\"\n\n    ADD COMPONENT \"PeakAlarm\" WITH TYPE \"value\"\n        SET LABEL \"Peak load\"\n        BIND VALUE TO TOPIC \"building/hq/alarms/peak\"\n\n    ADD COMPONENT \"Hvac101\" WITH TYPE \"value\"\n        SET LABEL \"Room 101 HVAC\"\n        BIND VALUE TO TOPIC \"building/hq/floor1/room101/hvac\"\n\n    ADD COMPONENT \"Hvac201\" WITH TYPE \"value\"\n        SET LABEL \"Room 201 HVAC\"\n        BIND VALUE TO TOPIC \"building/hq/floor2/room201/hvac\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 13. Panel — floor comfort\n\nTemperature and CO₂ per room. One notebook can define several dashboards."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE PANEL FloorComfort\n    WITH TITLE \"HQ — Comfort\"\n    WITH VISIBILITY PUBLIC\n    WITH STATE PUBLISHED\n    WITH LAYOUT \"grid\" COLUMNS 2\n\n    ADD COMPONENT \"Temp101\" WITH TYPE \"gauge\"\n        SET LABEL \"Room 101\"\n        SET UNIT \"°C\"\n        SET RANGE FROM 15 TO 30\n        BIND VALUE TO TOPIC \"building/hq/floor1/room101/temperature\"\n\n    ADD COMPONENT \"Temp201\" WITH TYPE \"gauge\"\n        SET LABEL \"Room 201\"\n        SET UNIT \"°C\"\n        SET RANGE FROM 15 TO 30\n        BIND VALUE TO TOPIC \"building/hq/floor2/room201/temperature\"\n\n    ADD COMPONENT \"Co2101\" WITH TYPE \"value\"\n        SET LABEL \"Room 101 CO₂\"\n        SET UNIT \"ppm\"\n        BIND VALUE TO TOPIC \"building/hq/floor1/room101/co2\"\n\n    ADD COMPONENT \"Co2201\" WITH TYPE \"value\"\n        SET LABEL \"Room 201 CO₂\"\n        SET UNIT \"ppm\"\n        BIND VALUE TO TOPIC \"building/hq/floor2/room201/co2\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 14. AI agents — energy and comfort working together\n\nTwo **agents** share one LLM route. The energy agent watches power; the comfort agent watches rooms\nand may hand questions to the energy agent (`WITH AGENTS`). Both are defined without a running LLM.\nCreate their users first: `-addUser energy-bot <password>` and `-addUser comfort-bot <password>`."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE BuildingOllama WITH TYPE LLM\n    ADD LLM_CONFIG\n        WITH PROVIDER \"ollama\"\n        WITH BASE_URL \"http://localhost:11434\"\n        WITH MODEL \"llama3.2\"\n\nDEFINE AGENT EnergyAgent\n    USES LLM ROUTE BuildingOllama\n    WITH DESCRIPTION \"Explains building power use and peak alarms\"\n    WITH DEFAULT_USER \"energy-bot\"\n    WITH INTERACTION_TOPIC \"building/hq/agents/energy\"\n    ADD TOOL \"read_mqtt\"\n        WITH TOPICS \"building/hq/energy/#, building/hq/alarms/#\"\n\nDEFINE AGENT ComfortAgent\n    USES LLM ROUTE BuildingOllama\n    WITH DESCRIPTION \"Answers comfort questions about each room\"\n    WITH DEFAULT_USER \"comfort-bot\"\n    WITH INTERACTION_TOPIC \"building/hq/agents/comfort\"\n    WITH AGENTS \"EnergyAgent\"\n    ADD TOOL \"read_mqtt\"\n        WITH TOPICS \"building/hq/#\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 15. Ask the agents `[needs: Ollama]`"
+  },
+  {
+    "kind": 2,
+    "language": "shellscript",
+    "value": "ollama pull llama3.2\nmosquitto_pub -u root -P coreflux -t \"building/hq/agents/comfort/s1/ask\" -m \"Is room 201 comfortable for a meeting, and is power use high right now?\"\nmosquitto_sub -u root -P coreflux -t \"building/hq/agents/comfort/s1/response\" -C 1"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 16. Outdoor weather `[needs: internet]`\n\nA `REST_API` client calls the free Open-Meteo API. Publish anything to\n`building/hq/weather/request`; the forecast JSON arrives on `building/hq/weather/current`."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE WeatherApi WITH TYPE REST_API\n    ADD REST_API_CONFIG\n        WITH BASE_ADDRESS \"https://api.open-meteo.com\"\n        WITH ENABLE_CLIENT \"true\"\n        WITH USE_SSL \"true\"\n    ADD EVENT GetWeather\n        WITH SOURCE_TOPIC \"building/hq/weather/request\"\n        WITH DESTINATION_TOPIC \"building/hq/weather/current\"\n        WITH METHOD \"GET\"\n        WITH ENDPOINT \"/v1/forecast?latitude=38.72&longitude=-9.14&current=temperature_2m\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 17. A real BACnet controller `[needs: BACnet device]`\n\nRead a room sensor from a BACnet/IP controller. Change `IP`, `DEVICE_ID` and the object address."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE FloorController WITH TYPE BACNET\n    ADD BACNET_CONFIG\n        WITH IP \"192.168.1.10\"\n        WITH DEVICE_ID 1234\n    ADD MAPPING RoomSensors\n        WITH SOURCE_TOPIC \"building/hq/bacnet/floor1\"\n        WITH EVERY 5 SECONDS\n        ADD TAG RoomTemp\n            WITH ADDRESS \"AI:0\"\n            WITH DATA_TYPE \"FLOAT\"\n            WITH UNIT \"degC\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 18. Email the facility team `[needs: SMTP server]`\n\nSend an email for every peak-load alarm. Set `SMTP_HOST`, `SMTP_USER` and the `SMTP_PASSWORD` secret first."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE FacilityMail WITH TYPE EMAIL\n    ADD SMTP_CONFIG\n        WITH HOST GET ENV \"SMTP_HOST\"\n        WITH PORT 587\n        WITH USERNAME GET ENV \"SMTP_USER\"\n        WITH PASSWORD GET SECRET \"SMTP_PASSWORD\"\n        WITH USE_TLS \"true\"\n    ADD EVENT PeakLoadMail\n        WITH SOURCE_TOPIC \"building/hq/alarms/peak\"\n        WITH SUBJECT \"HQ peak load alarm\"\n        WITH RECIPIENT \"facility@example.com\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Try it"
+  },
+  {
+    "kind": 2,
+    "language": "shellscript",
+    "value": "# The whole building namespace\nmosquitto_sub -u root -P coreflux -t \"building/hq/#\" -v\n\n# Request a setpoint over HTTP\ncurl -X POST http://localhost:8086/api/setpoint -H \"Content-Type: application/json\" \\\n  -d '{\"room\":\"room201\",\"setpoint\":21.5}'\n\n# Read the Modbus gateway, e.g. pymodbus.console tcp --host localhost --port 5021"
+  }
+]
