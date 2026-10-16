@@ -5,7 +5,7 @@ Each code cell has a plain-language markdown cell before it.
 
 | Notebook | Theme | Highlights |
 |---|---|---|
-| [01-demo-flights.lotnb](01-demo-flights.lotnb) | Airport operations | Python, timer, topic and callable actions, models with inheritance, REST API server, file storage, MQTT bridge, rules, theme, panel, AI agent |
+| [01-flights-tracker.lotnb](01-flights-tracker.lotnb) | Airport operations | Python, timer, topic and callable actions, models with inheritance, REST API server, file storage, MQTT bridge, rules, theme, panel, AI agent |
 | [02-bottling-line.lotnb](02-bottling-line.lotnb) | Factory line (IIoT) | Modbus server and client, OPC UA server and client, OEE with Python, model inheritance, **Things** (preview), rules, dashboard, maintenance agent; optional PostgreSQL, Kafka and Siemens S7 |
 | [03-smart-building.lotnb](03-smart-building.lotnb) | Smart building | Unified namespace with wildcard actions, comfort and energy alarms, Modbus gateway for a BMS, REST webhook, two dashboards, two cooperating agents; optional weather API, BACnet and email |
 
