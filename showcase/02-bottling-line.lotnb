@@ -1,0 +1,217 @@
+[
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "# Bottling Line — a factory line with a built-in PLC\n\nA two-station bottling line (filler and capper) that shows **industrial connectors** and\n**reusable assets**: a simulated PLC over Modbus, an OPC UA server for SCADA, OEE models,\nalarms, a dashboard and a maintenance agent.\n\n**Core mode runs on a bare Coreflux broker.** The broker plays both sides: it *serves* Modbus and\nOPC UA, and *reads them back* as a client — so you see real industrial traffic without hardware.\nCells marked `[needs: …]` need the service named there. Cells marked `(preview)` use\n`DEFINE THING`, which ships after ENG-421; each one has a fallback cell that works today.\n\n| Topic | What lives there |\n|---|---|\n| `bottling/sim/<station>/…` | Simulated sensor values |\n| `bottling/plc/<station>/…` | The same values read back from the Modbus PLC |\n| `bottling/line1/…` | Models and KPIs (OEE, alarms) |"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 1. Python — line maths\n\nSmall helpers: `sample(n)` makes believable sensor values, and `oee(good, total, target)` computes\nOverall Equipment Effectiveness (quality × performance, as a percentage)."
+  },
+  {
+    "kind": 2,
+    "language": "python",
+    "value": "# Script Name: LineMath\nimport json, math\n\ndef sample(n):\n    n = int(float(n))\n    return json.dumps({\n        \"filler_temp\": round(62 + 6 * math.sin(n / 5), 1),\n        \"capper_temp\": round(48 + 4 * math.cos(n / 7), 1),\n        \"bottles\": n * 12,\n        \"rejects\": n // 9,\n    })\n\ndef oee(good, total, target):\n    good, total, target = float(good), float(total), float(target)\n    if total <= 0 or target <= 0:\n        return 0\n    return round(100 * (good / total) * min(total / target, 1), 1)"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 2. Action — simulate the line\n\nEvery 2 seconds the line produces bottles and the two stations warm up and cool down."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION SimulateLine\nON EVERY 2 SECONDS DO\n    SET \"n\" WITH GET TOPIC \"bottling/sim/tick\" AS INT\n    SET \"n\" WITH {n} + 1\n    KEEP TOPIC \"bottling/sim/tick\" WITH {n}\n    CALL PYTHON \"LineMath.sample\"\n        WITH ({n})\n        RETURN AS {s}\n    PUBLISH TOPIC \"bottling/sim/filler/temperature\" WITH GET JSON \"filler_temp\" IN {s} AS DOUBLE\n    PUBLISH TOPIC \"bottling/sim/capper/temperature\" WITH GET JSON \"capper_temp\" IN {s} AS DOUBLE\n    PUBLISH TOPIC \"bottling/sim/line/bottles\" WITH GET JSON \"bottles\" IN {s} AS INT\n    PUBLISH TOPIC \"bottling/sim/line/rejects\" WITH GET JSON \"rejects\" IN {s} AS INT"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 3. Connector — a Modbus PLC served by the broker\n\n`MODBUS_SERVER` makes the broker look like a PLC. Each tag copies an MQTT topic into a\nModbus holding register, so any SCADA or HMI can read it on port 5020."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE LinePlcServer WITH TYPE MODBUS_SERVER\n    ADD MODBUS_SERVER_CONFIG\n        WITH PORT 5020\n    ADD MAPPING Line1\n        ADD TAG FillerTemp\n            WITH ADDRESS \"100\"\n            WITH ADDRESS_TYPE \"HOLDING_REGISTER\"\n            WITH DATA_TYPE \"FLOAT\"\n            WITH SOURCE_TOPIC \"bottling/sim/filler/temperature\"\n        ADD TAG CapperTemp\n            WITH ADDRESS \"102\"\n            WITH ADDRESS_TYPE \"HOLDING_REGISTER\"\n            WITH DATA_TYPE \"FLOAT\"\n            WITH SOURCE_TOPIC \"bottling/sim/capper/temperature\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 4. Connector — read the PLC as a Modbus client\n\n`MODBUS_TCP` polls a PLC. Here it polls the broker's own Modbus server every second.\nEach tag publishes to `<SOURCE_TOPIC>/<tag name>`, e.g. `bottling/plc/line1/FillerTemp`.\nOn a real line, change `IP` to your PLC."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE LinePlc WITH TYPE MODBUS_TCP\n    ADD MODBUS_CONFIG\n        WITH IP \"127.0.0.1\"\n        WITH PORT 5020\n        WITH SLAVE_ID 1\n    ADD MAPPING Line1\n        WITH SOURCE_TOPIC \"bottling/plc/line1\"\n        WITH EVERY 1 SECONDS\n        ADD TAG FillerTemp\n            WITH ADDRESS \"100\"\n            WITH ADDRESS_TYPE \"HOLDING_REGISTER\"\n            WITH DATA_TYPE \"FLOAT\"\n        ADD TAG CapperTemp\n            WITH ADDRESS \"102\"\n            WITH ADDRESS_TYPE \"HOLDING_REGISTER\"\n            WITH DATA_TYPE \"FLOAT\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 5. Connector — an OPC UA server for SCADA\n\n`OPCUA_SERVER` publishes line KPIs as OPC UA nodes on `opc.tcp://<host>:4841`.\n`ADDRESS` sets each node id, e.g. `ns=2;s=Line1.Oee`."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE LineOpcServer WITH TYPE OPCUA_SERVER\n    ADD OPCUA_SERVER_CONFIG\n        WITH SERVER_PORT 4841\n    ADD MAPPING Kpis\n        WITH SOURCE_TOPIC \"bottling/line1/kpi\"\n        ADD TAG Oee\n            WITH ADDRESS \"Line1.Oee\"\n            WITH DATA_TYPE \"FLOAT\"\n        ADD TAG Bottles\n            WITH ADDRESS \"Line1.Bottles\"\n            WITH DATA_TYPE \"INT32\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 6. Connector — read OPC UA as a client\n\n`OPCUA` connects to any OPC UA server. Here it reads the OEE node back from the broker's own server."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE LineOpcClient WITH TYPE OPCUA\n    ADD OPCUA_CONFIG\n        WITH ENDPOINT_URL \"opc.tcp://127.0.0.1:4841\"\n        WITH AUTH_MODE 0\n        WITH AUTO_ACCEPT_UNTRUSTED_CERTIFICATES \"true\"\n    ADD MAPPING Kpis\n        WITH EVERY 2 SECONDS\n        ADD TAG Oee\n            WITH ADDRESS \"ns=2;s=Line1.Oee\"\n            WITH DATA_TYPE \"FLOAT\"\n            WITH SOURCE_TOPIC \"bottling/opcua/line1/oee\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 7. Model — what every machine has\n\nA base **model** for any station: temperature from the PLC plus a fixed station type."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL Machine COLLAPSED WITH TOPIC \"bottling/line1/machine\"\n    ADD DOUBLE \"temperature\" WITH TOPIC \"bottling/plc/line1/FillerTemp\" AS TRIGGER\n    ADD STRING \"line\" WITH \"line1\"\n    ADD STRING \"updated\" WITH TIMESTAMP \"ISO\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 8. Model inheritance — filler and capper\n\n`FROM Machine` reuses the base fields; each station adds its own."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE MODEL Filler COLLAPSED FROM Machine WITH TOPIC \"bottling/line1/filler\"\n    ADD STRING \"station\" WITH \"filler\"\n    ADD INT \"bottles\" WITH TOPIC \"bottling/sim/line/bottles\"\n\nDEFINE MODEL Capper COLLAPSED FROM Machine WITH TOPIC \"bottling/line1/capper\"\n    ADD DOUBLE \"temperature\" WITH TOPIC \"bottling/plc/line1/CapperTemp\" AS TRIGGER\n    ADD STRING \"station\" WITH \"capper\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 9. Action — compute OEE\n\nOn every production count, call Python for OEE and publish the KPI topics the OPC UA server serves."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION ComputeOee\nON TOPIC \"bottling/sim/line/bottles\" DO\n    SET \"total\" WITH PAYLOAD AS DOUBLE\n    SET \"rejects\" WITH GET TOPIC \"bottling/sim/line/rejects\" AS DOUBLE\n    SET \"good\" WITH {total} - {rejects}\n    CALL PYTHON \"LineMath.oee\"\n        WITH ({good}, {total}, 1000)\n        RETURN AS {oee}\n    PUBLISH TOPIC \"bottling/line1/kpi/Oee\" WITH {oee}\n    PUBLISH TOPIC \"bottling/line1/kpi/Bottles\" WITH {total}"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 10. Station alarms (fallback — works today)\n\nRaise an overheat alarm when a station passes its limit. One action per station.\nSection 11 shows the same thing as a reusable **Thing**."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ACTION FillerOverheat\nON TOPIC \"bottling/plc/line1/FillerTemp\" DO\n    SET \"temp\" WITH PAYLOAD AS DOUBLE\n    IF {temp} > 66 THEN\n        PUBLISH TOPIC \"bottling/line1/alarms/filler\" WITH \"overheat \" + {temp}\n\nDEFINE ACTION CapperOverheat\nON TOPIC \"bottling/plc/line1/CapperTemp\" DO\n    SET \"temp\" WITH PAYLOAD AS DOUBLE\n    IF {temp} > 51 THEN\n        PUBLISH TOPIC \"bottling/line1/alarms/capper\" WITH \"overheat \" + {temp}"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 11. Thing template — a reusable station (preview)\n\n*Preview: needs a broker with ENG-421 (`DEFINE THING`). Deploy either this cell and the next,\nor the fallback in section 10 — not both.*\n\nA **Thing** bundles the entities of one asset. A `TEMPLATE` is a blueprint with parameters:\n`{{source}}` (required) and `{{limit}}` (default 60) are filled in when the Thing is created, and\n`{{path}}` is the instance's topic prefix. Single-brace `{temp}` stays a runtime variable."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE THING TEMPLATE Station\n    WITH PARAM source\n    WITH PARAM limit 60\n    WITH ACTION Overheat\n    ON TOPIC \"{{source}}\" DO\n        SET \"temp\" WITH PAYLOAD AS DOUBLE\n        IF {temp} > {{limit}} THEN\n            PUBLISH TOPIC \"{{path}}/alarm\" WITH \"overheat \" + {temp}"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 12. Thing — line 1 built from two stations (preview)\n\n*Preview: needs ENG-421.* `Line1` owns a filler and a capper, each an instance of `Station`\nwith its own PLC tag and limit. `path` on the root gives each child its own prefix, so alarms land on\n`bottling/line1/stations/filler/alarm` and `…/capper/alarm`. Edit the Thing, not its children."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE THING Line1\n    WITH PARAM path \"bottling/line1/stations\"\n    WITH THING filler OF Station\n        WITH PARAM source \"bottling/plc/line1/FillerTemp\"\n        WITH PARAM limit 66\n    WITH THING capper OF Station\n        WITH PARAM source \"bottling/plc/line1/CapperTemp\"\n        WITH PARAM limit 51"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 13. Rule — only operators change setpoints\n\nOperators may write under `bottling/line1/setpoints/#`; everyone else is denied."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE RULE OperatorsWriteSetpoints WITH PRIORITY 200 FOR Publish TO TOPIC \"bottling/line1/setpoints/#\"\n    IF USER IN GROUP \"operators\" THEN\n        ALLOW\n    ELSE\n        DENY"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 14. Theme — industrial dark"
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE THEME \"Industrial Dark\"\n    SET \"PRIMARY\" WITH \"#f97316\"\n    SET \"BACKGROUND\" WITH \"#0a0a0f\"\n    SET \"FOREGROUND\" WITH \"#fafafa\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 15. Panel — line 1 overview\n\nGauges for both stations, the OEE value and live counters."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE PANEL Line1Overview\n    WITH TITLE \"Line 1 — Bottling\"\n    WITH VISIBILITY PUBLIC\n    WITH STATE PUBLISHED\n    WITH LAYOUT \"grid\" COLUMNS 3\n\n    ADD COMPONENT \"FillerTemp\" WITH TYPE \"gauge\"\n        SET LABEL \"Filler\"\n        SET UNIT \"°C\"\n        SET RANGE FROM 0 TO 100\n        BIND VALUE TO TOPIC \"bottling/plc/line1/FillerTemp\"\n\n    ADD COMPONENT \"CapperTemp\" WITH TYPE \"gauge\"\n        SET LABEL \"Capper\"\n        SET UNIT \"°C\"\n        SET RANGE FROM 0 TO 100\n        BIND VALUE TO TOPIC \"bottling/plc/line1/CapperTemp\"\n\n    ADD COMPONENT \"Oee\" WITH TYPE \"value\"\n        SET LABEL \"OEE\"\n        SET UNIT \"%\"\n        BIND VALUE TO TOPIC \"bottling/line1/kpi/Oee\"\n\n    ADD COMPONENT \"Bottles\" WITH TYPE \"value\"\n        SET LABEL \"Bottles\"\n        BIND VALUE TO TOPIC \"bottling/line1/kpi/Bottles\"\n\n    ADD COMPONENT \"FillerAlarm\" WITH TYPE \"value\"\n        SET LABEL \"Filler alarm\"\n        BIND VALUE TO TOPIC \"bottling/line1/alarms/filler\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 16. AI agent — maintenance planner\n\nThe agent reads line data and may write reports under `bottling/line1/reports/#` only.\nIt is defined without a running LLM; ask it questions once Ollama is available.\nCreate its user first: `-addUser maintenance-bot <password>`."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE FactoryOllama WITH TYPE LLM\n    ADD LLM_CONFIG\n        WITH PROVIDER \"ollama\"\n        WITH BASE_URL \"http://localhost:11434\"\n        WITH MODEL \"llama3.2\"\n\nDEFINE AGENT MaintenancePlanner\n    USES LLM ROUTE FactoryOllama\n    WITH DESCRIPTION \"Watches line 1 temperatures and OEE and writes maintenance notes\"\n    WITH DEFAULT_USER \"maintenance-bot\"\n    WITH INTERACTION_TOPIC \"bottling/line1/planner\"\n    ADD TOOL \"read_mqtt\"\n        WITH TOPICS \"bottling/#\"\n    ADD TOOL \"write_mqtt\"\n        WITH TOPICS \"bottling/line1/reports/#\"\n        WITH LEVEL \"write\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 17. Ask the planner `[needs: Ollama]`"
+  },
+  {
+    "kind": 2,
+    "language": "shellscript",
+    "value": "ollama pull llama3.2\nmosquitto_pub -u root -P coreflux -t \"bottling/line1/planner/s1/ask\" -m \"Is any station close to overheating?\"\nmosquitto_sub -u root -P coreflux -t \"bottling/line1/planner/s1/response\" -C 1"
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 18. Traceability database `[needs: PostgreSQL]`\n\nStore every OEE value in PostgreSQL. Set `PG_HOST`, `PG_USER` and the `PG_PASSWORD` secret first,\nand create the table `oee (ts timestamptz, value double precision)`."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE LineDb WITH TYPE POSTGRESQL\n    ADD SQL_CONFIG\n        WITH SERVER GET ENV \"PG_HOST\"\n        WITH PORT 5432\n        WITH DATABASE \"bottling\"\n        WITH USERNAME GET ENV \"PG_USER\"\n        WITH PASSWORD GET SECRET \"PG_PASSWORD\"\n    ADD EVENT StoreOee\n        WITH SOURCE_TOPIC \"bottling/line1/kpi/Oee\"\n        WITH QUERY \"INSERT INTO oee (ts, value) VALUES (NOW(), '{payload}')\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 19. Stream to Kafka `[needs: Kafka]`\n\nSend line data north to a Kafka topic for analytics."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE LineKafka WITH TYPE KAFKA\n    ADD KAFKA_CONFIG\n        WITH BROKER_ADDRESS GET ENV \"KAFKA_BOOTSTRAP\"\n        WITH GROUP_ID \"coreflux-bottling\"\n    ADD EVENT ShipKpis\n        WITH SOURCE_TOPIC \"bottling/line1/kpi/#\"\n        WITH DESTINATION_TOPIC \"bottling.kpi\"\n        WITH DIRECTION \"out\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## 20. A real Siemens PLC `[needs: Siemens S7 PLC]`\n\nThe same pattern for an S7-1500: change the IP and the data-block addresses to match your PLC."
+  },
+  {
+    "kind": 2,
+    "language": "lot",
+    "value": "DEFINE ROUTE FillerS7 WITH TYPE SIEMENS_S7\n    ADD S7_CONFIG\n        WITH IP \"192.168.1.100\"\n        WITH CPU_TYPE \"S71500\"\n        WITH RACK 0\n        WITH SLOT 1\n    ADD MAPPING Filler\n        WITH EVERY 500 MILLISECONDS\n        ADD TAG Temperature\n            WITH ADDRESS \"DB1.DBD100\"\n            WITH DATA_TYPE \"REAL\"\n            WITH SOURCE_TOPIC \"bottling/s7/filler/temperature\""
+  },
+  {
+    "kind": 1,
+    "language": "markdown",
+    "value": "## Try it"
+  },
+  {
+    "kind": 2,
+    "language": "shellscript",
+    "value": "# Live line data\nmosquitto_sub -u root -P coreflux -t \"bottling/#\" -v\n\n# Read the Modbus registers from any Modbus tool, e.g. (pip install pymodbus):\n#   pymodbus.console tcp --host localhost --port 5020\n# Browse OPC UA at opc.tcp://localhost:4841 with UaExpert or any OPC UA client"
+  }
+]
